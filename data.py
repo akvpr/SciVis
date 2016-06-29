@@ -1,5 +1,6 @@
 import sys
 import math
+import readVCF
 
 class Reader():
 
@@ -144,11 +145,7 @@ class Reader():
     def returnCytoTab(self):
         return self.cytoTabInfo
 
-    #Reads a vcf file with name string given by toRead.
-    #Stores meta information lines and inserts variants located in a chromosome
-    #into corresponding chromosome items created by reading a tab file.
-    #note that tab file has to have been read first.
-    def readVCF(self, toRead):
+    def readVCFFile(self, toRead):
         self.vcfFileName = toRead
         with open(toRead, 'r') as vcf:
 
@@ -178,45 +175,13 @@ class Reader():
             numvars = 0
             for line in vcf:
                 numvars += 1
-                fields = line.split('\t')
-                chromRefName = fields[0]
+                #Feed every data line into readVCF, returning: (chrA,posA,chrB,posB,event_type,description,format)
+                (chrA,posA,chrB,posB,event_type,description,format) = readVCF.readVCFLine(line)
                 #Iterate through chromosome list to find match to insert data into
                 for chromo in self.chromosomes:
-                    if chromo.name == chromRefName:
-                        #The ALT field is stripped of its '< >'
-                        if fields[4].startswith('<'):
-                            fields[4] = fields[4].strip('<')
-                            fields[4] = fields[4].strip('>')
-                        #the INFO field is here processed, looking for the END and GENE data points
-                        list = fields[7].split(';')
-                        END = '.'
-                        for index in range(len(list)):
-                            if list[index].startswith('END'):
-                                END = list[index].split('=')[1]
-                            if list[index].startswith('CSQ'):
-                                #The CSQ field has several sub-fields, each separated with ','
-                                sub_list = list[index].split(',')
-                                geneList = []
-                                for sub_index in range(len(sub_list)):
-                                    #The gene name field is always the fourth element in the CSQ field separated with '|'
-                                    sub_sub_list = sub_list[sub_index].split('|')
-                                    geneList.append(sub_sub_list[3])
-                                #Convert the list to a set to remove any duplicates
-                                geneSet = set(geneList)
-                                s = ', '
-                                GENES = s.join(geneSet)
-                            if list[index].startswith('CYTOBAND'):
-                                sub_list = list[index].split('=')
-                                #CBAND = sub_list[1].split(',')[0]
-                                CBAND = sub_list[1]
-
-                        chromo.addVariant(fields[1],fields[4], fields[7],END,GENES,CBAND)
+                    if chromo.name == chrA:
+                        chromo.addVariant(chrA,posA,chrB,posB,event_type,description,format)
                         break
-
-            #DEBUG: print where variants are found, how many
-            #print("Found %d variants:" % (numvars))
-            #for chromo in self.chromosomes:
-            #    print("%d in chromosome " % (len(chromo.variants)) + chromo.name)
             return 1
 
     def returnVCFHeader(self):
@@ -260,15 +225,30 @@ class Chromosome():
     def setEnd(self,end):
         self.end = end
 
-    def addVariant(self,pos,alt,info,end,gene,cband):
-        variant = [pos,alt,info,end,gene,cband]
+    def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
+        #For every variant we would like the genes in CSQ
+        csqField = description["CSQ"]
+        #The CSQ field has several sub-fields, each separated with ','
+        subList = csqField.split(',')
+        geneList = []
+        for subIndex in range(len(subList)):
+            #The gene name field is always the fourth element in the CSQ field separated with '|'
+            subSubList = subList[subIndex].split('|')
+            geneList.append(subSubList[3])
+        #Convert the list to a set to remove any duplicates
+        geneSet = set(geneList)
+        s = ', '
+        allGenes = s.join(geneSet)
+        #We would also like the CYTOBAND field
+        cband = description["CYTOBAND"]
+        #Add the variant data to this chromosome
+        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband]
         self.variants.append(variant)
 
     def createConnections(self):
-        #Checks if the fourth field in the variant array i.e. the "ALT" field starts with "N", this implies the variant has an interaction
-        #These corresponding values for the variant are then added to the list: CHRA,CHRB,WINA,WINB,CBANDS
+        #These corresponding values for the variant are added to the list: CHRA,CHRB,WINA,WINB,CYTOBAND
         for variant in self.variants:
-            if variant[1].startswith('N'):
-                list = variant[2].split(';')
-                connection = [list[1].split('=')[1], list[3].split('=')[1], list[2].split('=')[1], list[4].split('=')[1], list[16].split('=')[1]]
+            if variant[0] is not variant[2]:
+                description = variant[5]
+                connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],description["CYTOBAND"]]
                 self.connections.append(connection)

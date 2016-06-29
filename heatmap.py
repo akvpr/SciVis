@@ -27,6 +27,8 @@ class HeatmapView(QWidget):
         self.minCoverage = 0
         self.maxCoverage = 5
         self.createSettings()
+        self.createChInfo()
+        self.showChInfo()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -149,6 +151,149 @@ class HeatmapView(QWidget):
     def updateSettings(self,item):
         if item.row() == 0:
             self.maxColumns = item.data(0)
+
+    #Creates data model for info window
+    def createChInfo(self):
+        self.chModel = QStandardItemModel()
+        topstring = ["Name","Length","No. of variants"]
+        self.chModel.setHorizontalHeaderLabels(topstring)
+        for chromo in self.chromosomes:
+            infostring = [chromo.name,chromo.end,str(len(chromo.variants))]
+            infoItems = [QStandardItem(string) for string in infostring]
+            #only keep chromosomes up to MT (no. 24)
+            if (self.chromosomes.index(chromo) <= 24):
+                self.chModel.appendRow(infoItems)
+
+    #Creates a window with chromosomes and toggles, info
+    def showChInfo(self):
+        #if any earlier window is open, close it
+        try:
+            self.chDia.close()
+        except:
+            pass
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        self.chDia = QDialog(self)
+        self.chDia.setWindowTitle("Chromosome info")
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton('View variants', self.chDia)
+        viewVarButton.clicked.connect(self.viewVariants)
+        #Button for adding variants
+        addVariantButton = QPushButton('Add variant', self.chDia)
+        addVariantButton.clicked.connect(self.addVariant)
+        self.chDia.layout = QGridLayout(self.chDia)
+        self.chDia.layout.addWidget(self.chList,0,0,1,4)
+        self.chDia.layout.addWidget(viewVarButton,1,0,1,1)
+        self.chDia.layout.addWidget(addVariantButton,1,1,1,1)
+        self.chDia.setMinimumSize(450,400)
+        self.chDia.show()
+
+    #Creates data model for variants in given chromosome
+    def createVariantInfo(self, chromo):
+        self.varModel = QStandardItemModel()
+        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
+        self.varModel.setHorizontalHeaderLabels(topstring)
+        #Adding variant info to a list
+        for variant in chromo.variants:
+            infoitem = []
+            #this is event_type in the variant
+            infoitem.append(QStandardItem(variant[4]))
+            #this is posA in the variant
+            startText = str(variant[1])
+            infoitem.append(QStandardItem(startText))
+            #this is posB or chrB: posB in the variant (if interchromosomal)
+            if variant[0] is not variant[2]:
+                endText = str(variant[2]) + ": " + str(variant[3])
+            else:
+                endText = str(variant[3])
+            infoitem.append(QStandardItem(endText))
+            #this is allGenes in the variant
+            infoitem.append(QStandardItem(variant[7]))
+            #this is cband in the variant
+            infoitem.append(QStandardItem(variant[8]))
+            self.varModel.appendRow(infoitem)
+
+    #Creates a popup containing variant info in a table.
+    #Could be implemented in a better way than multiple dialogues..
+    def viewVariants(self):
+        selectedIndexes = self.chList.selectedIndexes()
+        selectedRows = [index.row() for index in selectedIndexes]
+        selectedRows = set(selectedRows)
+        for row in selectedRows:
+            chromo = self.chromosomes[row]
+            self.createVariantInfo(chromo)
+            viewVarDia = QDialog(self)
+            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
+            varList = QTableView()
+            varList.setMinimumSize(500,400)
+            varList.verticalHeader().hide()
+            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            varList.setModel(self.varModel)
+            varList.resizeColumnToContents(1)
+            viewVarDia.layout = QGridLayout(viewVarDia)
+            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia.show()
+
+    def addVariant(self):
+        #Adds a variant to selected chromosomes. Some models still have to be updated.
+        #Not sure how to best handle input yet.
+        selectedIndexes = self.chList.selectedIndexes()
+        selectedRows = [index.row() for index in selectedIndexes]
+        selectedRows = set(selectedRows)
+        for row in selectedRows:
+            chromo = self.chromosomes[row]
+            addVariantDialog = QDialog()
+            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
+            applyButton = QPushButton('Ok', addVariantDialog)
+            applyButton.clicked.connect(addVariantDialog.accept)
+            cancelButton = QPushButton('Cancel', addVariantDialog)
+            cancelButton.clicked.connect(addVariantDialog.reject)
+            locBoxValidator = QIntValidator(self)
+            locBoxValidator.setBottom(0)
+            locABox = QLineEdit()
+            locBBox = QLineEdit()
+            locABox.setValidator(locBoxValidator)
+            locBBox.setValidator(locBoxValidator)
+            chromoBox = QComboBox()
+            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
+            chromoBox.addItems(chromoStrings)
+            altBox = QLineEdit()
+            geneBox = QLineEdit()
+            locALabel = QLabel("Position A: ")
+            chromoLabel = QLabel("Chromosome B: ")
+            locBLabel = QLabel("Position B: ")
+            altLabel = QLabel("ALT: ")
+            geneLabel = QLabel("GENE(S): ")
+            addVariantDialog.layout = QGridLayout(addVariantDialog)
+            addVariantDialog.layout.addWidget(locALabel,0,0)
+            addVariantDialog.layout.addWidget(locABox,0,1)
+            addVariantDialog.layout.addWidget(chromoLabel,1,0)
+            addVariantDialog.layout.addWidget(chromoBox,1,1)
+            addVariantDialog.layout.addWidget(locBLabel,2,0)
+            addVariantDialog.layout.addWidget(locBBox,2,1)
+            addVariantDialog.layout.addWidget(altLabel,3,0)
+            addVariantDialog.layout.addWidget(altBox,3,1)
+            addVariantDialog.layout.addWidget(geneLabel,4,0)
+            addVariantDialog.layout.addWidget(geneBox,4,1)
+            addVariantDialog.layout.addWidget(applyButton,5,0)
+            addVariantDialog.layout.addWidget(cancelButton,5,1)
+            choice = addVariantDialog.exec_()
+            if choice == QDialog.Accepted:
+                #END field should only be filled if chrB is the same
+                if chromoBox.currentText() == chromo.name:
+                    end = locBBox.text()
+                else:
+                    end = "."
+                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
 
 class HeatmapWindow(QWidget):
 
