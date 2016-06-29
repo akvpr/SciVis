@@ -355,6 +355,7 @@ class KaryogramView(QGraphicsView):
                             bandNameItem.setPos(nameXPosition,bandRectItem.rect().top())
                             bandNameItem.setScale(self.chromoWidth/35)
                             self.scene.addItem(bandNameItem)
+                            nameRectItem = QGraphicsRectItem
                             textItems.append(bandNameItem)
                             placeLeft = not placeLeft
                 chromoNameItem = QGraphicsTextItem(chromo.name)
