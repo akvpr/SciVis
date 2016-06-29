@@ -270,8 +270,8 @@ class KaryogramView(QGraphicsView):
                 cbandA = connection[4].split(',')[0]
                 cbandB = connection[4].split(',')[1]
                 #The x-positions are accessed, the chromosome A x-pos has the chromosome width added to it. This will make the connection start on its right side
-                xPosA = self.cytoGraphicItems[chrA.name].boundingRect().x() + self.cytoGraphicItems[chrA.name].boundingRect().width()
-                xPosB = self.cytoGraphicItems[chrB.name].boundingRect().x()
+                xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
+                xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
                 cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]
                 cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
@@ -321,7 +321,7 @@ class KaryogramView(QGraphicsView):
 
             #Lays out items vetically with equal spacing between each other, with a width depending on screen size
             currentXPosition = containerRect.left()
-            xIncrement = containerRect.width() / self.numDispChromos
+            xIncrement = containerRect.width() / (self.numDispChromos-10)
             self.chromoWidth = containerRect.width() / 48
 
             #Create the graphic items for each chromosome if they are set to be displayed
@@ -353,12 +353,13 @@ class KaryogramView(QGraphicsView):
                             bandNameItem = QGraphicsTextItem(cyto[3])
                             nameXPosition = bandRectItem.rect().left()-bandRectItem.boundingRect().width() if placeLeft else bandRectItem.rect().right()
                             bandNameItem.setPos(nameXPosition,bandRectItem.rect().top())
+                            bandNameItem.setScale(self.chromoWidth/35)
                             self.scene.addItem(bandNameItem)
                             textItems.append(bandNameItem)
                             placeLeft = not placeLeft
                 chromoNameItem = QGraphicsTextItem(chromo.name)
                 chromoNameItem.setPos(currentXPosition,chromoHeight)
-                chromoNameItem.setScale(0.8)
+                chromoNameItem.setScale(self.chromoWidth/20)
                 self.scene.addItem(chromoNameItem)
                 textItems.append(chromoNameItem)
                 #Create a custom graphic item group from created items, enter in dict
@@ -435,6 +436,14 @@ class KaryogramView(QGraphicsView):
             movedItem = self.scene.mouseGrabberItem()
             if movedItem.data(1) == 'karyoItem':
                 self.updateConnections()
+                
+    def wheelEvent(self,event):
+        if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
+            self.scale(0.9,0.9)
+        elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
+            self.scale(1.1,1.1)
+        else:
+            QGraphicsView.wheelEvent(self, event)
 
 
 #Custom graphics group class for more convenient handling of cytoband items
