@@ -162,11 +162,13 @@ class CircosView(QGraphicsView):
             connCheckItem.setCheckState(Qt.Unchecked)
             checkList = [dispCheckItem, connCheckItem]
             infoItems.extend(checkList)
+            chromo.display_connections = False
             #only keep chromosomes up to MT (no. 24), but toggle MT display off as default
             #do not add GLxxxx chr (no.25 and up)
             if (self.chromosomes.index(chromo) < 24):
                 dispCheckItem.setCheckState(Qt.Checked)
                 self.chModel.appendRow(infoItems)
+                chromo.display = True
             elif (self.chromosomes.index(chromo) == 24):
                 dispCheckItem.setCheckState(Qt.Unchecked)
                 chromo.display = False
@@ -218,15 +220,26 @@ class CircosView(QGraphicsView):
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
         self.varModel = QStandardItemModel()
-        topstring = ['START', 'ALT', 'END', 'GENE(S)']
+        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
         self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list (except the info field, which has index=2 in the variant list)
+        #Adding variant info to a list
         for variant in chromo.variants:
             infoitem = []
-            infoitem.append(QStandardItem(variant[0]))
-            infoitem.append(QStandardItem(variant[1]))
-            infoitem.append(QStandardItem(variant[3]))
+            #this is event_type in the variant
             infoitem.append(QStandardItem(variant[4]))
+            #this is posA in the variant
+            startText = str(variant[1])
+            infoitem.append(QStandardItem(startText))
+            #this is posB or chrB: posB in the variant (if interchromosomal)
+            if variant[0] is not variant[2]:
+                endText = str(variant[2]) + ": " + str(variant[3])
+            else:
+                endText = str(variant[3])
+            infoitem.append(QStandardItem(endText))
+            #this is allGenes in the variant
+            infoitem.append(QStandardItem(variant[7]))
+            #this is cband in the variant
+            infoitem.append(QStandardItem(variant[8]))
             self.varModel.appendRow(infoitem)
 
     #Creates a popup containing variant info in a table.
@@ -241,7 +254,7 @@ class CircosView(QGraphicsView):
             viewVarDia = QDialog(self)
             viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
             varList = QTableView()
-            varList.setMinimumSize(440,400)
+            varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.varModel)

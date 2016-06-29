@@ -20,8 +20,9 @@ class KaryogramView(QGraphicsView):
         self.colors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
         'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
         self.createSettings()
-        self.updateItems()
         self.createChInfo()
+        self.showChInfo()
+        self.updateItems()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -95,9 +96,12 @@ class KaryogramView(QGraphicsView):
             cytoCheckItem.setCheckState(Qt.Unchecked)
             checkList = [dispCheckItem, connCheckItem, cytoCheckItem]
             infoItems.extend(checkList)
+            chromo.display_connections = False
+            chromo.display_cytoBandNames = False
             if (self.chromosomes.index(chromo) < 24):
                 dispCheckItem.setCheckState(Qt.Checked)
                 self.chModel.appendRow(infoItems)
+                chromo.display = True
             else:
                 chromo.display = False
 
@@ -145,16 +149,26 @@ class KaryogramView(QGraphicsView):
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
         self.varModel = QStandardItemModel()
-        topstring = ['START', 'ALT', 'END', 'GENE(S)', 'CYTOBAND']
+        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
         self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list (except the info field, which has index=2 in the variant list)
+        #Adding variant info to a list
         for variant in chromo.variants:
             infoitem = []
-            infoitem.append(QStandardItem(variant[0]))
-            infoitem.append(QStandardItem(variant[1]))
-            infoitem.append(QStandardItem(variant[3]))
+            #this is event_type in the variant
             infoitem.append(QStandardItem(variant[4]))
-            infoitem.append(QStandardItem(variant[5]))
+            #this is posA in the variant
+            startText = str(variant[1])
+            infoitem.append(QStandardItem(startText))
+            #this is posB or chrB: posB in the variant (if interchromosomal)
+            if variant[0] is not variant[2]:
+                endText = str(variant[2]) + ": " + str(variant[3])
+            else:
+                endText = str(variant[3])
+            infoitem.append(QStandardItem(endText))
+            #this is allGenes in the variant
+            infoitem.append(QStandardItem(variant[7]))
+            #this is cband in the variant
+            infoitem.append(QStandardItem(variant[8]))
             self.varModel.appendRow(infoitem)
 
     #Creates a popup containing variant info in a table.
@@ -169,7 +183,7 @@ class KaryogramView(QGraphicsView):
             viewVarDia = QDialog(self)
             viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
             varList = QTableView()
-            varList.setMinimumSize(440,400)
+            varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.varModel)
@@ -250,7 +264,7 @@ class KaryogramView(QGraphicsView):
                     continue
                 else:
                     chrB = self.chromosomes[int(connection[1])-1]
-                if not chrB.display:
+                if not chrB.display or chrA.name == chrB.name:
                     continue
                 #The cytobands which the connections will go between are gathered
                 cbandA = connection[4].split(',')[0]
