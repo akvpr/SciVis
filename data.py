@@ -239,8 +239,11 @@ class Chromosome():
         geneSet = set(geneList)
         s = ', '
         allGenes = s.join(geneSet)
-        #We would also like the CYTOBAND field
-        cband = description["CYTOBAND"]
+        #We would also like the CYTOBAND field, if this exists
+        if "CYTOBAND" in description:
+            cband = description["CYTOBAND"]
+        else:
+            cband = None
         #Add the variant data to this chromosome
         variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband]
         self.variants.append(variant)
@@ -250,5 +253,9 @@ class Chromosome():
         for variant in self.variants:
             if variant[0] is not variant[2]:
                 description = variant[5]
-                connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],description["CYTOBAND"]]
+                if "CYTOBAND" in description:
+                    cband = description["CYTOBAND"]
+                else:
+                    cband = None
+                connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],cband]
                 self.connections.append(connection)

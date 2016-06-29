@@ -264,7 +264,7 @@ class KaryogramView(QGraphicsView):
                     continue
                 else:
                     chrB = self.chromosomes[int(connection[1])-1]
-                if not chrB.display or chrA.name == chrB.name:
+                if not chrB.display or chrA.name == chrB.name or connection[4] is None:
                     continue
                 #The cytobands which the connections will go between are gathered
                 cbandA = connection[4].split(',')[0]

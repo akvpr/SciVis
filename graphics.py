@@ -167,6 +167,7 @@ class WGSView(QMainWindow):
     def viewDatasets(self):
         dataList = QTreeView()
         dataList.setModel(self.datasetModel)
+        dataList.setHeaderHidden(True)
         datasetDia = QDialog(self)
         datasetDia.setWindowTitle("Data sets")
         editButton = QPushButton('Edit set', datasetDia)

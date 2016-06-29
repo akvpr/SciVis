@@ -510,21 +510,21 @@ class CircosView(QGraphicsView):
                 posB = tempPath.currentPosition()
                 centerPos = outerChrRect.center()
                 #A Bezier curve is then created between these three points
-                ConnectionPath = QPainterPath()
-                ConnectionPath.moveTo(posA)
-                ConnectionPath.quadTo(centerPos,posB)
+                connectionPath = QPainterPath()
+                connectionPath.moveTo(posA)
+                connectionPath.quadTo(centerPos,posB)
                 #The path is converted to a graphics path item
-                ConnectionItem = QGraphicsPathItem(ConnectionPath)
+                connectionItem = QGraphicsPathItem(connectionPath)
                 #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
                 pen = QPen(self.chromoColors[self.chromosomes[ChrB-1].name], self.connWidth)
-                ConnectionItem.setPen(pen)
+                connectionItem.setPen(pen)
                 #Creating a rectangle (1x1 pixels) around each posB point for use when heat mapping the connections
                 rect = QRect(posB.toPoint(),QSize(1,1))
                 rect.moveCenter(posB.toPoint())
                 #self.scene.addItem(QGraphicsRectItem(rect))
-                ConnectionInfo = [ConnectionItem, rect, posA, posB, (ChrB-1), counter]
+                connectionInfo = [connectionItem, rect, posA, posB, (ChrB-1), counter]
                 #The item is added to a list
-                self.chromosomes[index].connection_list.append(ConnectionInfo)
+                self.chromosomes[index].connection_list.append(connectionInfo)
                 counter = counter + 1
 
         #Checking to see if any neighbouring connections are close to eachother, if they are -> create a color gradient for both the
