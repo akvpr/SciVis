@@ -14,6 +14,7 @@ class WGSView(QMainWindow):
         super().__init__()
         self.activeScene = False
         self.datasetModel = QStandardItemModel()
+        self.defaultFolder = ""
         self.initmainwin()
 
     def initmainwin(self):
@@ -110,6 +111,11 @@ class WGSView(QMainWindow):
         self.fileMenu.addAction(self.viewDatasetsAct)
         self.fileMenu.addAction(self.exitAct)
 
+    def selectDefaultFolder(self):
+        selectedDir = QFileDialog.getExistingDirectory()
+        if selectedDir:
+            self.defaultFolder = selectedDir
+
     #Creates data model item, and adds to main dataset model
     def createDatasetItem(self, reader, setname):
         #Should display setname as parent
@@ -143,11 +149,21 @@ class WGSView(QMainWindow):
         #Prompt the user for a name of the dataset
         setName, ok = QInputDialog.getText(self, "Enter set name", "Set name", QLineEdit.Normal, "New set")
         if ok and setName:
+            #If no default folder for data is set, use current path
+            if not self.defaultFolder:
+                startFolder = QDir.currentPath()
+            else:
+                startFolder = self.defaultFolder
             #Some confusion with python bindings makes getOpenFileName return a tuple.
             #First element is the name of the file.
-            tabFile = QFileDialog.getOpenFileName(None,"Specify TAB file",QDir.currentPath(),
+            tabFile = QFileDialog.getOpenFileName(None,"Specify TAB file",startFolder,
             "TAB files (*.tab)")[0]
-            vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",QDir.currentPath(),
+            #If no default folder was set, set it to folder containing chosen tab
+            if not self.defaultFolder and tabFile:
+                self.defaultFolder = QFileInfo(tabFile).absolutePath()
+            elif not self.defaultFolder:
+                self.defaultFolder = QDir.currentPath()
+            vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
             "VCF files (*.vcf)")[0]
             cytoFile = "cytoBand.txt"
             #Cancel results in empty string, only go ahead if not empty
@@ -175,10 +191,13 @@ class WGSView(QMainWindow):
         #editButton.clicked.connect(datasetDia.accept)
         newButton = QPushButton('New set', datasetDia)
         newButton.clicked.connect(self.createNewDataset)
+        defaultFolderButton = QPushButton('Set default folder', datasetDia)
+        defaultFolderButton.clicked.connect(self.selectDefaultFolder)
         datasetDia.layout = QGridLayout(datasetDia)
-        datasetDia.layout.addWidget(dataList,0,0,1,2)
+        datasetDia.layout.addWidget(dataList,0,0,1,3)
         datasetDia.layout.addWidget(editButton,1,0,1,1)
         datasetDia.layout.addWidget(newButton,1,1,1,1)
+        datasetDia.layout.addWidget(defaultFolderButton,1,2,1,1)
         datasetDia.show()
 
     #Prompts user to select dataset and returns its data
