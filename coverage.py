@@ -29,11 +29,13 @@ class CoverageScrollArea(QScrollArea):
         except:
             pass
 
+    def returnActiveDataset(self):
+        return self.subview.returnActiveDataset()
+
 class CoverageView(QWidget):
 
     def __init__(self,dataDict):
         super().__init__()
-        #self.setWidgetResizable(True)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.subWindows = []

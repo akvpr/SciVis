@@ -29,6 +29,9 @@ class HeatmapScrollArea(QScrollArea):
         except:
             pass
 
+    def returnActiveDataset(self):
+        return self.subview.returnActiveDataset()
+
 
 class HeatmapView(QWidget):
 

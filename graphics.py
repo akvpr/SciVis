@@ -45,23 +45,22 @@ class WGSView(QMainWindow):
         self.viewDatasetsAct.triggered.connect(self.viewDatasets)
         self.saveDatasetAct = QAction('Save dataset',self)
         self.saveDatasetAct.triggered.connect(self.saveDataset)
-        #Create menus, toolbar, and add actions
+        #Create menus, and add actions
         self.menubar = self.menuBar()
         self.fileMenu = self.menubar.addMenu('File')
         self.addMenuItems()
-
         #Create a tab widget handling active scenes
         self.sceneTabs = QTabWidget(self)
         self.sceneTabs.currentChanged.connect(self.viewChanged)
         self.setCentralWidget(self.sceneTabs)
         self.views = []
-
         self.show()
 
     #Exports anything in the current view as a png image
     def exportImage(self):
         #Set default name to same as the vcf file in current view
-        viewDataset = self.view.returnActiveDataset()
+        view = self.sceneTabs.currentWidget()
+        viewDataset = view.returnActiveDataset()
         tabName = viewDataset['tabName']
         vcfName = viewDataset['vcfName']
         try:
@@ -71,7 +70,7 @@ class WGSView(QMainWindow):
             defaultPath = QDir.currentPath() + "/" + tabName
             defaultPath = defaultPath.replace("tab","png")
         savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
-        viewPixMap = QPixmap.grabWidget(self.view)
+        viewPixMap = QPixmap.grabWidget(view)
         viewPixMap.save(savePath)
 
     #Checks if an active scene is running and if it's ok to continue scene change
@@ -102,11 +101,6 @@ class WGSView(QMainWindow):
         self.fileMenu.addAction(self.newCovDiagramAct)
         self.fileMenu.addAction(self.newKaryogramAct)
         self.fileMenu.addAction(self.newHeatmapAct)
-        if self.activeScene:
-            self.viewSettingsAct = QAction('Settings',self)
-            self.viewSettingsAct.triggered.connect(self.view.viewSettings)
-            self.fileMenu.addAction(self.viewSettingsAct)
-            self.fileMenu.addAction(self.exportImageAct)
         self.fileMenu.addAction(self.viewDatasetsAct)
         self.fileMenu.addAction(self.saveDatasetAct)
         self.fileMenu.addAction(self.exitAct)
@@ -267,8 +261,15 @@ class WGSView(QMainWindow):
             self.removeToolBar(self.tools)
             self.tools.hide()
             self.tools.destroy()
+            self.fileMenu.removeAction(self.viewSettingsAct)
+            self.fileMenu.removeAction(self.exportImageAct)
         except:
             pass
+        #Add the settings menu item for this view, and export image
+        self.viewSettingsAct = QAction('Settings',self)
+        self.viewSettingsAct.triggered.connect(view.viewSettings)
+        self.fileMenu.addAction(self.viewSettingsAct)
+        self.fileMenu.addAction(self.exportImageAct)
         #Add appropriate toolbar for scene type
         viewType = view.type
         if viewType == "circos":
