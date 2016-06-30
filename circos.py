@@ -14,7 +14,7 @@ class CircosView(QGraphicsView):
         self.chromosomes = self.dataDict['chromosomeList']
         self.numChr = len(self.chromosomes)
         self.setRenderHints(QPainter.Antialiasing)
-        self.resize(800,600)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
         self.chromosomeItems = []
         self.coverageItems = []
@@ -679,6 +679,14 @@ class CircosView(QGraphicsView):
         vcfText.setFlag(QGraphicsItem.ItemIsMovable)
         vcfText.setTextInteractionFlags(Qt.TextEditorInteraction)
 
+    def wheelEvent(self,event):
+        if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
+            self.scale(0.9,0.9)
+        elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
+            self.scale(1.1,1.1)
+        else:
+            QGraphicsView.wheelEvent(self, event)        
+        
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
 
@@ -732,6 +740,7 @@ class CircosScene(QGraphicsScene):
                     self.markedChromItems.append(item)
             else:
                 QGraphicsScene.mousePressEvent(self,event)
+                
 
     #Opens a context menu on right click
     def contextMenuEvent(self,event):

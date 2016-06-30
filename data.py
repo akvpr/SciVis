@@ -251,11 +251,16 @@ class Chromosome():
     def createConnections(self):
         #These corresponding values for the variant are added to the list: CHRA,CHRB,WINA,WINB,CYTOBAND
         for variant in self.variants:
+            description = variant[5]
+            if "CYTOBAND" in description:
+                cband = description["CYTOBAND"]
+            else:
+                cband = None
             if variant[0] is not variant[2]:
-                description = variant[5]
-                if "CYTOBAND" in description:
-                    cband = description["CYTOBAND"]
-                else:
-                    cband = None
                 connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],cband]
                 self.connections.append(connection)
+            else:
+                connection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), cband]
+                self.connections.append(connection)
+         
+                
