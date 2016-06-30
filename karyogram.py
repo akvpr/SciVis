@@ -4,6 +4,7 @@ from PySide.QtGui import *
 class KaryogramView(QGraphicsView):
 
     def __init__(self,dataDict):
+        self.type = "karyogram"
         self.scene = QGraphicsScene()
         self.dataDict = dataDict
         super().__init__(self.scene)
@@ -26,6 +27,12 @@ class KaryogramView(QGraphicsView):
 
     def returnActiveDataset(self):
         return self.dataDict
+
+    def closeOpenWindows(self):
+        try:
+            self.chDia.close()
+        except:
+            pass
 
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
@@ -437,7 +444,7 @@ class KaryogramView(QGraphicsView):
             movedItem = self.scene.mouseGrabberItem()
             if movedItem.data(1) == 'karyoItem':
                 self.updateConnections()
-                
+
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)
