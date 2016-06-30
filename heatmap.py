@@ -22,6 +22,7 @@ class HeatmapView(QWidget):
         self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
         self.grid = QGridLayout()
         self.setLayout(self.grid)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         self.maxColumns = 2
         self.bpWindow = 50
         self.minCoverage = 0

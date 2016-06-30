@@ -20,6 +20,7 @@ class CoverageView(QWidget):
         self.subWindows = []
         self.grid = QGridLayout()
         self.setLayout(self.grid)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         self.maxColumns = 2
         self.bpWindow = 50
         self.minCoverage = 0

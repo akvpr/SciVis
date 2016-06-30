@@ -18,7 +18,7 @@ class WGSView(QMainWindow):
 
     def initmainwin(self):
         self.setWindowTitle('WGS')
-        self.resize(800,600)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         #Center the main window on the user's screen
         frameGeo = self.frameGeometry()
         desktopCenter = QDesktopWidget().availableGeometry().center()

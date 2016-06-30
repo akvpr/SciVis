@@ -14,7 +14,7 @@ class CircosView(QGraphicsView):
         self.chromosomes = self.dataDict['chromosomeList']
         self.numChr = len(self.chromosomes)
         self.setRenderHints(QPainter.Antialiasing)
-        self.resize(800,600)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
         self.chromosomeItems = []
         self.coverageItems = []

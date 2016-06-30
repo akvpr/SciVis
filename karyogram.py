@@ -13,7 +13,7 @@ class KaryogramView(QGraphicsView):
         self.cytoGraphicItems = {}
         self.connectionGraphicItems = []
         self.setRenderHints(QPainter.Antialiasing)
-        self.resize(800,600)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
         #create a list of stain names, to be able to set their colors later..
         self.stainNames = ['acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
@@ -320,8 +320,8 @@ class KaryogramView(QGraphicsView):
                     maxBp = int(chromo.end)
 
             #Lays out items vetically with equal spacing between each other, with a width depending on screen size
-            currentXPosition = containerRect.left()
-            xIncrement = containerRect.width() / (self.numDispChromos-10)
+            currentXPosition = 100
+            xIncrement = (containerRect.width() / self.numDispChromos) + 60
             self.chromoWidth = containerRect.width() / 48
 
             #Create the graphic items for each chromosome if they are set to be displayed
@@ -352,7 +352,7 @@ class KaryogramView(QGraphicsView):
                         if chromo.display_cytoBandNames:
                             bandNameItem = QGraphicsTextItem(cyto[3])
                             nameXPosition = bandRectItem.rect().left()-bandRectItem.boundingRect().width() if placeLeft else bandRectItem.rect().right()
-                            bandNameItem.setPos(nameXPosition,bandRectItem.rect().top())
+                            bandNameItem.setPos(nameXPosition,bandRectItem.rect().center().y()-12)
                             bandNameItem.setScale(self.chromoWidth/35)
                             self.scene.addItem(bandNameItem)
                             nameRectItem = QGraphicsRectItem
