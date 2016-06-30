@@ -4,6 +4,7 @@ import circos
 import coverage
 import karyogram
 import heatmap
+import pickle
 from PySide.QtCore import *
 from PySide.QtGui import *
 
@@ -42,6 +43,8 @@ class WGSView(QMainWindow):
         self.exportImageAct.triggered.connect(self.exportImage)
         self.viewDatasetsAct = QAction('View datasets',self)
         self.viewDatasetsAct.triggered.connect(self.viewDatasets)
+        self.saveDatasetAct = QAction('Save dataset',self)
+        self.saveDatasetAct.triggered.connect(self.saveDataset)
         #Create menus, toolbar, and add actions
         self.menubar = self.menuBar()
         self.fileMenu = self.menubar.addMenu('File')
@@ -109,12 +112,45 @@ class WGSView(QMainWindow):
             self.fileMenu.addAction(self.viewSettingsAct)
             self.fileMenu.addAction(self.exportImageAct)
         self.fileMenu.addAction(self.viewDatasetsAct)
+        self.fileMenu.addAction(self.saveDatasetAct)
         self.fileMenu.addAction(self.exitAct)
 
     def selectDefaultFolder(self):
         selectedDir = QFileDialog.getExistingDirectory()
         if selectedDir:
             self.defaultFolder = selectedDir
+
+    def saveDataset(self):
+        selectedData = self.selectDataset()
+        filename = selectedData['setName'] + ".pkl"
+        if not self.defaultFolder:
+            startPath = QDir.currentPath() + "/" + filename
+        else:
+            startPath = self.defaultFolder + "/" + filename
+        savePath = QFileDialog.getSaveFileName(self, "Save dataset", startPath, "Pickle files (*.pkl)")[0]
+        if savePath:
+            with open(savePath, 'wb') as output:
+                pickle.dump(selectedData, output, pickle.HIGHEST_PROTOCOL)
+
+    def loadDataset(self):
+        filename = QFileDialog.getOpenFileName(None,"Specify pkl file",self.defaultFolder,
+        "Pickle files (*.pkl)")[0]
+        if filename:
+            itemData = pickle.load( open( filename, "rb" ) )
+            #Create a model item and add to the model containing datasets
+            dataItem = QStandardItem(itemData['setName'])
+            dataItem.setData(itemData)
+            vcfItem = QStandardItem(itemData['vcfName'])
+            vcfItem.setEnabled(False)
+            tabItem = QStandardItem(itemData['tabName'])
+            tabItem.setEnabled(False)
+            cytoName = "cytoBand.txt"
+            cytoItem = QStandardItem(cytoName)
+            cytoItem.setEnabled(False)
+            dataItem.appendRow(vcfItem)
+            dataItem.appendRow(tabItem)
+            dataItem.appendRow(cytoItem)
+            self.datasetModel.appendRow(dataItem)
 
     #Creates data model item, and adds to main dataset model
     def createDatasetItem(self, reader, setname):
@@ -129,7 +165,7 @@ class WGSView(QMainWindow):
         cytoTab = reader.returnCytoTab()
         cytoName = "cytoBand.txt"
         itemData = {'chromosomeList':chromosomeList,'coverageNormLog':coverageNormLog,'coverageNorm':coverageNorm,
-        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab}
+        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab,'setName':setname}
         dataItem.setData(itemData)
         #Vcf and tab names should be child items
         vcfItem = QStandardItem(vcfName)
@@ -191,13 +227,16 @@ class WGSView(QMainWindow):
         #editButton.clicked.connect(datasetDia.accept)
         newButton = QPushButton('New set', datasetDia)
         newButton.clicked.connect(self.createNewDataset)
+        loadButton = QPushButton('Load set', datasetDia)
+        loadButton.clicked.connect(self.loadDataset)
         defaultFolderButton = QPushButton('Set default folder', datasetDia)
         defaultFolderButton.clicked.connect(self.selectDefaultFolder)
         datasetDia.layout = QGridLayout(datasetDia)
-        datasetDia.layout.addWidget(dataList,0,0,1,3)
+        datasetDia.layout.addWidget(dataList,0,0,1,4)
         datasetDia.layout.addWidget(editButton,1,0,1,1)
         datasetDia.layout.addWidget(newButton,1,1,1,1)
-        datasetDia.layout.addWidget(defaultFolderButton,1,2,1,1)
+        datasetDia.layout.addWidget(loadButton,1,2,1,1)
+        datasetDia.layout.addWidget(defaultFolderButton,1,3,1,1)
         datasetDia.show()
 
     #Prompts user to select dataset and returns its data
