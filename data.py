@@ -226,6 +226,8 @@ class Chromosome():
         self.end = end
 
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
+        #The variants are by default set to be shown
+        display_variant = True
         #For every variant we would like the genes in CSQ
         csqField = description["CSQ"]
         #The CSQ field has several sub-fields, each separated with ','
@@ -245,22 +247,26 @@ class Chromosome():
         else:
             cband = None
         #Add the variant data to this chromosome
-        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband]
+        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband, display_variant]
         self.variants.append(variant)
 
     def createConnections(self):
         #These corresponding values for the variant are added to the list: CHRA,CHRB,WINA,WINB,CYTOBAND
+        self.connections = []
         for variant in self.variants:
-            description = variant[5]
-            if "CYTOBAND" in description:
-                cband = description["CYTOBAND"]
+            if not variant[9]:
+                continue
             else:
-                cband = None
-            if variant[0] is not variant[2]:
-                connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],cband]
-                self.connections.append(connection)
-            else:
-                connection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), cband]
-                self.connections.append(connection)
+                description = variant[5]
+                if "CYTOBAND" in description:
+                    cband = description["CYTOBAND"]
+                else:
+                    cband = None
+                if variant[0] is not variant[2]:
+                    connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],cband]
+                    self.connections.append(connection)
+                else:
+                    connection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), cband]
+                    self.connections.append(connection)
          
                 

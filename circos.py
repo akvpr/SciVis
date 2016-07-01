@@ -20,6 +20,8 @@ class CircosView(QGraphicsView):
         self.coverageItems = []
         self.chromosome_connection_list = []
         self.regionItems = []
+        self.activeVariantModels = {} 
+        self.activeVariantTables = {}
 
         self.bpWindow = 500
         self.useCoverageLog = True
@@ -219,9 +221,9 @@ class CircosView(QGraphicsView):
 
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
+        varModel = QStandardItemModel()
+        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Active']
+        varModel.setHorizontalHeaderLabels(topstring)
         #Adding variant info to a list
         for variant in chromo.variants:
             infoitem = []
@@ -240,7 +242,15 @@ class CircosView(QGraphicsView):
             infoitem.append(QStandardItem(variant[7]))
             #this is cband in the variant
             infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
+            #this is a check for displaying a variant or not
+            dispCheckItem = QStandardItem()
+            dispCheckItem.setCheckable(False)
+            dispCheckItem.setCheckState(Qt.Checked)
+            infoitem.append(dispCheckItem)
+            
+            varModel.appendRow(infoitem)
+            
+        self.activeVariantModels[chromo.name] = varModel
 
     #Creates a popup containing variant info in a table.
     #Could be implemented in a better way than multiple dialogues..
@@ -254,15 +264,42 @@ class CircosView(QGraphicsView):
             viewVarDia = QDialog(self)
             viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
             varList = QTableView()
+            #Create button for activation of variants
+            varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
+            varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
+            
             varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
+            varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
+            
+            self.activeVariantTables[chromo.name] = varList
+            
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
-
+            
+    def toggleVariants(self, chromoName, chromoIndex):
+            
+        selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
+        selectedRows = [index.row() for index in selectedIndexes]
+        selectedRows = set(selectedRows)
+        for row in selectedRows:
+            #sätta varModel i en lista å ta chromoIndex modellen för itemet
+            dispVarItem = self.activeVariantModels[chromoName].item(row,5)
+            if self.chromosomes[chromoIndex].variants[row][9]:
+                dispVarItem.setCheckState(Qt.Unchecked)
+                self.chromosomes[chromoIndex].variants[row][9] = False
+            else:
+                dispVarItem.setCheckState(Qt.Checked)
+                self.chromosomes[chromoIndex].variants[row][9] = True
+        self.chromosomes[chromoIndex].createConnections()
+        self.initscene()
+        
+                
+                
     def addVariant(self):
         #Adds a variant to selected chromosomes. Some models still have to be updated.
         #Not sure how to best handle input yet.
