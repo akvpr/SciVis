@@ -255,9 +255,9 @@ class WGSView(QMainWindow):
     #Handles toolbar switching etc if the view is changed
     def viewChanged(self,viewIndex):
         view = self.sceneTabs.currentWidget()
-        #Remove current toolbar
+        #Remove current toolbar and close open windows for last open view
         try:
-            #view.closeOpenWindows()
+            self.lastActiveView.closeOpenWindows()
             self.removeToolBar(self.tools)
             self.tools.hide()
             self.tools.destroy()
@@ -265,6 +265,7 @@ class WGSView(QMainWindow):
             self.fileMenu.removeAction(self.exportImageAct)
         except:
             pass
+        self.lastActiveView = view
         #Add the settings menu item for this view, and export image
         self.viewSettingsAct = QAction('Settings',self)
         self.viewSettingsAct.triggered.connect(view.viewSettings)
