@@ -21,7 +21,7 @@ class CircosView(QGraphicsView):
         self.coverageItems = []
         self.chromosome_connection_list = []
         self.regionItems = []
-        self.activeVariantModels = {} 
+        self.activeVariantModels = {}
         self.activeVariantTables = {}
 
         self.bpWindow = 500
@@ -29,7 +29,6 @@ class CircosView(QGraphicsView):
         self.minCoverage = 0.5
         self.maxCoverage = 1.5
         self.startColor = QColor.fromRgb(243,241,172)
-        self.numDispChromos = 23
         self.connWidth = 1
         self.showChrNames = True
         self.createSettings()
@@ -156,6 +155,21 @@ class CircosView(QGraphicsView):
                 totalDispBP += int(chromo.end)
         return totalDispBP
 
+    #Updates display toggles according to this scene's active chModel
+    def updateToggles(self):
+        for row in range(self.chModel.rowCount()):
+            dispConnItem = self.chModel.item(row,4)
+            dispItem = self.chModel.item(row,3)
+            if (dispItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display = True
+            else:
+                self.chromosomes[row].display = False
+            if (dispConnItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display_connections = True
+            else:
+                self.chromosomes[row].display_connections = False
+        self.initscene()
+
     #Creates data model for info window
     def createChInfo(self):
         self.chModel = QStandardItemModel()
@@ -254,9 +268,9 @@ class CircosView(QGraphicsView):
             dispCheckItem.setCheckable(False)
             dispCheckItem.setCheckState(Qt.Checked)
             infoitem.append(dispCheckItem)
-            
+
             varModel.appendRow(infoitem)
-            
+
         self.activeVariantModels[chromo.name] = varModel
 
     #Creates a popup containing variant info in a table.
@@ -274,22 +288,21 @@ class CircosView(QGraphicsView):
             #Create button for activation of variants
             varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
-            
+
             varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
-            
+
             self.activeVariantTables[chromo.name] = varList
-            
+
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
-            
+
     def toggleVariants(self, chromoName, chromoIndex):
-            
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
@@ -304,9 +317,7 @@ class CircosView(QGraphicsView):
                 self.chromosomes[chromoIndex].variants[row][9] = True
         self.chromosomes[chromoIndex].createConnections()
         self.initscene()
-        
-                
-                
+
     def addVariant(self):
         #Adds a variant to selected chromosomes. Some models still have to be updated.
         #Not sure how to best handle input yet.
@@ -389,11 +400,9 @@ class CircosView(QGraphicsView):
                 self.chromosomes[row].display = False
                 dispConnItem.setCheckState(Qt.Unchecked)
                 self.chromosomes[row].display_connections = False
-                self.numDispChromos -= 1
             else:
                 dispItem.setCheckState(Qt.Checked)
                 self.chromosomes[row].display = True
-                self.numDispChromos += 1
         self.initscene()
 
     def toggleConnections(self):
@@ -663,12 +672,21 @@ class CircosView(QGraphicsView):
         for chrItem in self.chromosomeItems:
             #Update the color dict in case user modified these
             self.chromoColors[chrItem.nameString] = chrItem.brush().color()
-            self.scene.removeItem(chrItem)
+            try:
+                self.scene.removeItem(chrItem)
+            except:
+                pass
         for index in range(len(self.chromosomes)):
              for connItem in self.chromosomes[index].connection_list:
-                  self.scene.removeItem(connItem[0])
+                 try:
+                     self.scene.removeItem(connItem[0])
+                 except:
+                     pass
         for regionItem in self.regionItems:
-            self.scene.removeItem(regionItem)
+            try:
+                self.scene.removeItem(regionItem)
+            except:
+                pass
         self.scene.markedChromItems = []
         self.chromosomeItems = []
         self.coverageItems = []

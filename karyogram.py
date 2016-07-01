@@ -9,9 +9,11 @@ class KaryogramView(QGraphicsView):
         self.dataDict = dataDict
         super().__init__(self.scene)
         self.chromosomes = self.dataDict['chromosomeList']
+        self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
         self.numDispChromos = 24
         self.cytoGraphicItems = {}
+        self.cytoGraphicItemPositions = {}
         self.connectionGraphicItems = []
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
@@ -84,6 +86,21 @@ class KaryogramView(QGraphicsView):
         self.settingsDia.layout.addWidget(self.colorList,0,2,1,2)
         self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
         self.settingsDia.show()
+
+    #Updates display toggles according to this scene's active chModel
+    def updateToggles(self):
+        for row in range(self.chModel.rowCount()):
+            dispConnItem = self.chModel.item(row,4)
+            dispItem = self.chModel.item(row,3)
+            if (dispItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display = True
+            else:
+                self.chromosomes[row].display = False
+            if (dispConnItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display_connections = True
+            else:
+                self.chromosomes[row].display_connections = False
+        self.updateItems()
 
     #Creates data model for info window
     def createChInfo(self):
@@ -327,7 +344,7 @@ class KaryogramView(QGraphicsView):
                     maxBp = int(chromo.end)
 
             #Lays out items vetically with equal spacing between each other, with a width depending on screen size
-            currentXPosition = 100
+            currentXPosition = 0
             xIncrement = (containerRect.width() / self.numDispChromos) + 60
             self.chromoWidth = containerRect.width() / 48
 
@@ -377,14 +394,32 @@ class KaryogramView(QGraphicsView):
                 self.scene.addItem(cytoItem)
 
     def updateItems(self):
-        self.scene.clear()
+        #Save any old positions of items in case they have been moved by the user
+        for graphicItem in self.cytoGraphicItems.values():
+            self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
+            try:
+                self.scene.removeItem(graphicItem)
+            except:
+                pass
+        for connItem in self.connectionGraphicItems:
+            try:
+                self.scene.removeItem(connItem)
+            except:
+                pass
         self.createChromosomeItems()
+        #Move back the items to their old positions
+        for graphicItem in self.cytoGraphicItems.values():
+            if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
+                graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
         self.drawConnections()
         self.update()
 
     def updateConnections(self):
         for item in self.connectionGraphicItems:
-            self.scene.removeItem(item)
+            try:
+                self.scene.removeItem(item)
+            except:
+                pass
         self.drawConnections()
         self.update()
 

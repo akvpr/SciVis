@@ -274,6 +274,7 @@ class WGSView(QMainWindow):
         #Add appropriate toolbar for scene type
         viewType = view.type
         if viewType == "circos":
+            view.updateToggles()
             self.tools = self.addToolBar('Circos tools')
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.showChInfo)
@@ -304,6 +305,7 @@ class WGSView(QMainWindow):
             self.tools.addAction(self.updateLayoutAct)
             self.tools.show()
         if viewType == "karyogram":
+            view.updateToggles()
             self.tools = self.addToolBar('Karyogram tools')
             self.updateKaryogramAct = QAction('Update karyogram', self)
             self.updateKaryogramAct.triggered.connect(view.updateItems)
@@ -327,64 +329,60 @@ class WGSView(QMainWindow):
 
     #Creates and initializes a new circos diagram
     def newCirc(self):
-        if self.confirmChange():
 
-            self.statusBar().showMessage("Initializing new CIRCOS..")
-            selectedData = self.selectDataset()
-            self.statusBar().clearMessage()
-            #Initialize scene if a valid dataset has been returned
-            if selectedData is not None:
-                self.activeScene = True
-                view = circos.CircosView(selectedData)
-                self.views.append(view)
-                tabIndex = self.sceneTabs.addTab(view,"Circos")
-                self.sceneTabs.setCurrentIndex(tabIndex)
-                self.show()
+        self.statusBar().showMessage("Initializing new CIRCOS..")
+        selectedData = self.selectDataset()
+        self.statusBar().clearMessage()
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            self.activeScene = True
+            view = circos.CircosView(selectedData)
+            self.views.append(view)
+            tabIndex = self.sceneTabs.addTab(view,"Circos")
+            self.sceneTabs.setCurrentIndex(tabIndex)
+            self.show()
 
     #Creates and initializes a new coverage diagram
     def newCovDiagram(self):
-        if self.confirmChange():
 
-            self.statusBar().showMessage("Initializing new coverage diagram..")
-            selectedData = self.selectDataset()
-            self.statusBar().clearMessage()
-            #Initialize scene if a valid dataset has been returned
-            if selectedData is not None:
-                self.activeScene = True
-                view = coverage.CoverageScrollArea(selectedData)
-                self.views.append(view)
-                tabIndex = self.sceneTabs.addTab(view,"Coverage")
-                self.sceneTabs.setCurrentIndex(tabIndex)
-                self.show()
+        self.statusBar().showMessage("Initializing new coverage diagram..")
+        selectedData = self.selectDataset()
+        self.statusBar().clearMessage()
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            self.activeScene = True
+            view = coverage.CoverageScrollArea(selectedData)
+            self.views.append(view)
+            tabIndex = self.sceneTabs.addTab(view,"Coverage")
+            self.sceneTabs.setCurrentIndex(tabIndex)
+            self.show()
 
     #Creates and initializes a new karyotype diagram
     def newKaryogram(self):
-        if self.confirmChange():
 
-            self.statusBar().showMessage("Initializing karyogram..")
-            selectedData = self.selectDataset()
-            self.statusBar().clearMessage()
-            #Initialize scene if a valid dataset has been returned
-            if selectedData is not None:
-                self.activeScene = True
-                view = karyogram.KaryogramView(selectedData)
-                self.views.append(view)
-                tabIndex = self.sceneTabs.addTab(view,"Karyogram")
-                self.sceneTabs.setCurrentIndex(tabIndex)
-                self.show()
+        self.statusBar().showMessage("Initializing karyogram..")
+        selectedData = self.selectDataset()
+        self.statusBar().clearMessage()
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            self.activeScene = True
+            view = karyogram.KaryogramView(selectedData)
+            self.views.append(view)
+            tabIndex = self.sceneTabs.addTab(view,"Karyogram")
+            self.sceneTabs.setCurrentIndex(tabIndex)
+            self.show()
 
     #Creates and initializes a new heatmap diagram
     def newHeatmap(self):
-        if self.confirmChange():
 
-            self.statusBar().showMessage("Initializing new heatmap..")
-            selectedData = self.selectDataset()
-            self.statusBar().clearMessage()
-            #Initialize scene if a valid dataset has been returned
-            if selectedData is not None:
-                self.activeScene = True
-                view = heatmap.HeatmapScrollArea(selectedData)
-                self.views.append(view)
-                tabIndex = self.sceneTabs.addTab(view,"Heatmap")
-                self.sceneTabs.setCurrentIndex(tabIndex)
-                self.show()
+        self.statusBar().showMessage("Initializing new heatmap..")
+        selectedData = self.selectDataset()
+        self.statusBar().clearMessage()
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            self.activeScene = True
+            view = heatmap.HeatmapScrollArea(selectedData)
+            self.views.append(view)
+            tabIndex = self.sceneTabs.addTab(view,"Heatmap")
+            self.sceneTabs.setCurrentIndex(tabIndex)
+            self.show()
