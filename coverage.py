@@ -11,6 +11,27 @@ from matplotlib.backends.backend_qt4agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar)
 
+class CoverageScrollArea(QScrollArea):
+
+    def __init__(self,dataDict):
+        super().__init__()
+        self.type = "coverage"
+        self.subview = CoverageView(dataDict)
+        self.setWidget(self.subview)
+        self.setWidgetResizable(True)
+
+    def viewSettings(self):
+        self.subview.viewSettings()
+
+    def closeOpenWindows(self):
+        try:
+            self.subview.chDia.close()
+        except:
+            pass
+
+    def returnActiveDataset(self):
+        return self.subview.returnActiveDataset()
+
 class CoverageView(QWidget):
 
     def __init__(self,dataDict):

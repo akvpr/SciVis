@@ -45,16 +45,22 @@ class WGSView(QMainWindow):
         self.viewDatasetsAct.triggered.connect(self.viewDatasets)
         self.saveDatasetAct = QAction('Save dataset',self)
         self.saveDatasetAct.triggered.connect(self.saveDataset)
-        #Create menus, toolbar, and add actions
+        #Create menus, and add actions
         self.menubar = self.menuBar()
         self.fileMenu = self.menubar.addMenu('File')
         self.addMenuItems()
+        #Create a tab widget handling active scenes
+        self.sceneTabs = QTabWidget(self)
+        self.sceneTabs.currentChanged.connect(self.viewChanged)
+        self.setCentralWidget(self.sceneTabs)
+        self.views = []
         self.show()
 
     #Exports anything in the current view as a png image
     def exportImage(self):
         #Set default name to same as the vcf file in current view
-        viewDataset = self.view.returnActiveDataset()
+        view = self.sceneTabs.currentWidget()
+        viewDataset = view.returnActiveDataset()
         tabName = viewDataset['tabName']
         vcfName = viewDataset['vcfName']
         try:
@@ -64,7 +70,7 @@ class WGSView(QMainWindow):
             defaultPath = QDir.currentPath() + "/" + tabName
             defaultPath = defaultPath.replace("tab","png")
         savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
-        viewPixMap = QPixmap.grabWidget(self.view)
+        viewPixMap = QPixmap.grabWidget(view)
         viewPixMap.save(savePath)
 
     #Checks if an active scene is running and if it's ok to continue scene change
@@ -90,27 +96,11 @@ class WGSView(QMainWindow):
         else:
             return True
 
-    #Remove any old toolbars, menu items, clear up resources
-    def clearActiveView(self):
-        try:
-            self.removeToolBar(self.tools)
-            self.tools.hide()
-            self.tools.destroy()
-            self.view.destroy()
-        except:
-            pass
-        self.fileMenu.clear()
-
     def addMenuItems(self):
         self.fileMenu.addAction(self.newCircAct)
         self.fileMenu.addAction(self.newCovDiagramAct)
         self.fileMenu.addAction(self.newKaryogramAct)
         self.fileMenu.addAction(self.newHeatmapAct)
-        if self.activeScene:
-            self.viewSettingsAct = QAction('Settings',self)
-            self.viewSettingsAct.triggered.connect(self.view.viewSettings)
-            self.fileMenu.addAction(self.viewSettingsAct)
-            self.fileMenu.addAction(self.exportImageAct)
         self.fileMenu.addAction(self.viewDatasetsAct)
         self.fileMenu.addAction(self.saveDatasetAct)
         self.fileMenu.addAction(self.exitAct)
@@ -262,6 +252,79 @@ class WGSView(QMainWindow):
         else:
             return None
 
+    #Handles toolbar switching etc if the view is changed
+    def viewChanged(self,viewIndex):
+        view = self.sceneTabs.currentWidget()
+        #Remove current toolbar and close open windows for last open view
+        try:
+            self.lastActiveView.closeOpenWindows()
+            self.removeToolBar(self.tools)
+            self.tools.hide()
+            self.tools.destroy()
+            self.fileMenu.removeAction(self.viewSettingsAct)
+            self.fileMenu.removeAction(self.exportImageAct)
+        except:
+            pass
+        self.lastActiveView = view
+        #Add the settings menu item for this view, and export image
+        self.viewSettingsAct = QAction('Settings',self)
+        self.viewSettingsAct.triggered.connect(view.viewSettings)
+        self.fileMenu.addAction(self.viewSettingsAct)
+        self.fileMenu.addAction(self.exportImageAct)
+        #Add appropriate toolbar for scene type
+        viewType = view.type
+        if viewType == "circos":
+            self.tools = self.addToolBar('Circos tools')
+            self.showChInfoAct = QAction('Chromosomes',self)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
+            self.updateSceneAct = QAction('Update CIRCOS',self)
+            self.updateSceneAct.triggered.connect(view.initscene)
+            self.toggleCoverageAct = QAction('Toggle coverage',self)
+            self.toggleCoverageAct.triggered.connect(view.toggleCoverage)
+            self.addImageAct = QAction('Add Image to plot', self)
+            self.addImageAct.triggered.connect(view.addImage)
+            self.importColorTabAct = QAction('Color regions with file', self)
+            self.importColorTabAct.triggered.connect(view.importColorTab)
+            self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.updateSceneAct)
+            self.tools.addAction(self.toggleCoverageAct)
+            self.tools.addAction(self.addImageAct)
+            self.tools.addAction(self.importColorTabAct)
+            self.tools.show()
+        if viewType == "coverage":
+            self.tools = self.addToolBar('Coverage tools')
+            self.showChInfoAct = QAction('Chromosomes',self)
+            self.showChInfoAct.triggered.connect(view.subview.showChInfo)
+            self.addPlotAct = QAction('Add subplot', self)
+            self.addPlotAct.triggered.connect(view.subview.addChromoPlot)
+            self.updateLayoutAct = QAction('Update layout', self)
+            self.updateLayoutAct.triggered.connect(view.subview.arrangePlots)
+            self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.addPlotAct)
+            self.tools.addAction(self.updateLayoutAct)
+            self.tools.show()
+        if viewType == "karyogram":
+            self.tools = self.addToolBar('Karyogram tools')
+            self.updateKaryogramAct = QAction('Update karyogram', self)
+            self.updateKaryogramAct.triggered.connect(view.updateItems)
+            self.showChInfoAct = QAction('Chromosomes',self)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
+            self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.updateKaryogramAct)
+            self.tools.show()
+        if viewType == "heatmap":
+            self.tools = self.addToolBar('Coverage tools')
+            self.showChInfoAct = QAction('Chromosomes',self)
+            self.showChInfoAct.triggered.connect(view.subview.showChInfo)
+            self.addHeatmapAct = QAction('Add heatmap', self)
+            self.addHeatmapAct.triggered.connect(view.subview.addHeatmap)
+            self.updateLayoutAct = QAction('Update layout', self)
+            self.updateLayoutAct.triggered.connect(view.subview.arrangePlots)
+            self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.addHeatmapAct)
+            self.tools.addAction(self.updateLayoutAct)
+            self.tools.show()
+
     #Creates and initializes a new circos diagram
     def newCirc(self):
         if self.confirmChange():
@@ -272,28 +335,10 @@ class WGSView(QMainWindow):
             #Initialize scene if a valid dataset has been returned
             if selectedData is not None:
                 self.activeScene = True
-                self.clearActiveView()
-                self.view = circos.CircosView(selectedData)
-                self.setCentralWidget(self.view)
-                self.addMenuItems()
-                #Toolbar actions
-                self.showChInfoAct = QAction('Chromosomes',self)
-                self.showChInfoAct.triggered.connect(self.view.showChInfo)
-                self.updateSceneAct = QAction('Update CIRCOS',self)
-                self.updateSceneAct.triggered.connect(self.view.initscene)
-                self.toggleCoverageAct = QAction('Toggle coverage',self)
-                self.toggleCoverageAct.triggered.connect(self.view.toggleCoverage)
-                self.addImageAct = QAction('Add Image to plot', self)
-                self.addImageAct.triggered.connect(self.view.addImage)
-                self.importColorTabAct = QAction('Color regions with file', self)
-                self.importColorTabAct.triggered.connect(self.view.importColorTab)
-                self.tools = self.addToolBar('Chromosome tools')
-                self.tools.addAction(self.showChInfoAct)
-                self.tools.addAction(self.updateSceneAct)
-                self.tools.addAction(self.toggleCoverageAct)
-                self.tools.addAction(self.addImageAct)
-                self.tools.addAction(self.importColorTabAct)
-                self.tools.show()
+                view = circos.CircosView(selectedData)
+                self.views.append(view)
+                tabIndex = self.sceneTabs.addTab(view,"Circos")
+                self.sceneTabs.setCurrentIndex(tabIndex)
                 self.show()
 
     #Creates and initializes a new coverage diagram
@@ -306,25 +351,10 @@ class WGSView(QMainWindow):
             #Initialize scene if a valid dataset has been returned
             if selectedData is not None:
                 self.activeScene = True
-                self.clearActiveView()
-                self.view = coverage.CoverageView(selectedData)
-                self.scrollArea = QScrollArea(self)
-                self.scrollArea.setWidget(self.view)
-                self.scrollArea.setWidgetResizable(True)
-                self.setCentralWidget(self.scrollArea)
-                self.addMenuItems()
-                #Toolbar actions
-                self.tools = self.addToolBar('Coverage tools')
-                self.showChInfoAct = QAction('Chromosomes',self)
-                self.showChInfoAct.triggered.connect(self.view.showChInfo)
-                self.addPlotAct = QAction('Add subplot', self)
-                self.addPlotAct.triggered.connect(self.view.addChromoPlot)
-                self.updateLayoutAct = QAction('Update layout', self)
-                self.updateLayoutAct.triggered.connect(self.view.arrangePlots)
-                self.tools.addAction(self.showChInfoAct)
-                self.tools.addAction(self.addPlotAct)
-                self.tools.addAction(self.updateLayoutAct)
-                self.tools.show()
+                view = coverage.CoverageScrollArea(selectedData)
+                self.views.append(view)
+                tabIndex = self.sceneTabs.addTab(view,"Coverage")
+                self.sceneTabs.setCurrentIndex(tabIndex)
                 self.show()
 
     #Creates and initializes a new karyotype diagram
@@ -337,19 +367,10 @@ class WGSView(QMainWindow):
             #Initialize scene if a valid dataset has been returned
             if selectedData is not None:
                 self.activeScene = True
-                self.clearActiveView()
-                self.view = karyogram.KaryogramView(selectedData)
-                self.setCentralWidget(self.view)
-                self.addMenuItems()
-                #Toolbar actions
-                self.tools = self.addToolBar('Karyogram tools')
-                self.updateKaryogramAct = QAction('Update karyogram', self)
-                self.updateKaryogramAct.triggered.connect(self.view.updateItems)
-                self.showChInfoAct = QAction('Chromosomes',self)
-                self.showChInfoAct.triggered.connect(self.view.showChInfo)
-                self.tools.addAction(self.showChInfoAct)
-                self.tools.addAction(self.updateKaryogramAct)
-                self.tools.show()
+                view = karyogram.KaryogramView(selectedData)
+                self.views.append(view)
+                tabIndex = self.sceneTabs.addTab(view,"Karyogram")
+                self.sceneTabs.setCurrentIndex(tabIndex)
                 self.show()
 
     #Creates and initializes a new heatmap diagram
@@ -362,23 +383,8 @@ class WGSView(QMainWindow):
             #Initialize scene if a valid dataset has been returned
             if selectedData is not None:
                 self.activeScene = True
-                self.clearActiveView()
-                self.view = heatmap.HeatmapView(selectedData)
-                self.scrollArea = QScrollArea(self)
-                self.scrollArea.setWidget(self.view)
-                self.scrollArea.setWidgetResizable(True)
-                self.setCentralWidget(self.scrollArea)
-                self.addMenuItems()
-                #Toolbar actions
-                self.tools = self.addToolBar('Coverage tools')
-                self.showChInfoAct = QAction('Chromosomes',self)
-                self.showChInfoAct.triggered.connect(self.view.showChInfo)
-                self.addHeatmapAct = QAction('Add heatmap', self)
-                self.addHeatmapAct.triggered.connect(self.view.addHeatmap)
-                self.updateLayoutAct = QAction('Update layout', self)
-                self.updateLayoutAct.triggered.connect(self.view.arrangePlots)
-                self.tools.addAction(self.showChInfoAct)
-                self.tools.addAction(self.addHeatmapAct)
-                self.tools.addAction(self.updateLayoutAct)
-                self.tools.show()
+                view = heatmap.HeatmapScrollArea(selectedData)
+                self.views.append(view)
+                tabIndex = self.sceneTabs.addTab(view,"Heatmap")
+                self.sceneTabs.setCurrentIndex(tabIndex)
                 self.show()

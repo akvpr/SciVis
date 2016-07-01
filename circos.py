@@ -8,6 +8,7 @@ from PySide.QtGui import *
 class CircosView(QGraphicsView):
 
     def __init__(self,dataDict):
+        self.type = "circos"
         self.scene = CircosScene()
         super().__init__(self.scene)
         self.dataDict = dataDict
@@ -52,6 +53,12 @@ class CircosView(QGraphicsView):
 
     def returnActiveDataset(self):
         return self.dataDict
+
+    def closeOpenWindows(self):
+        try:
+            self.chDia.close()
+        except:
+            pass
 
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
@@ -722,8 +729,8 @@ class CircosView(QGraphicsView):
         elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
             self.scale(1.1,1.1)
         else:
-            QGraphicsView.wheelEvent(self, event)        
-        
+            QGraphicsView.wheelEvent(self, event)
+
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
 
@@ -777,7 +784,7 @@ class CircosScene(QGraphicsScene):
                     self.markedChromItems.append(item)
             else:
                 QGraphicsScene.mousePressEvent(self,event)
-                
+
 
     #Opens a context menu on right click
     def contextMenuEvent(self,event):
