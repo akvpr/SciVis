@@ -19,6 +19,7 @@ class CircosView(QGraphicsView):
         self.show()
         self.chromosomeItems = []
         self.coverageItems = []
+        self.distanceMarkerItems = []
         self.chromosome_connection_list = []
         self.regionItems = []
         self.activeVariantModels = {} 
@@ -586,6 +587,64 @@ class CircosView(QGraphicsView):
                             linearGrad.setColorAt(1, self.chromoColors[self.chromosomes[connItem1[4]].name].darker(300))
                             connItem1[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
                             connItem2[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
+                            
+                            
+    def createDistanceMarkers(self):
+        size = self.size()
+        totalDispBP = self.returnTotalDisplayedBP()
+        outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
+        inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+        chrStartAngle = 0
+        centerPoint = inRect.center()
+        for chromo in self.chromosomes:
+            if not chromo.display:
+                continue
+            chrEndAngle = (int(chromo.end) / totalDispBP) * 360 - 1
+            innerPath = QPainterPath()
+            innerPath.moveTo(centerPoint)
+            outerPath = QPainterPath()
+            outerPath.moveTo(centerPoint)
+            chromoLength = int(chromo.end)
+            curAngle = chrStartAngle
+            angleIncr = 1
+            distanceNameItemList = []
+            for angle in range(int(chrEndAngle+1)):
+                if angle%5 == 0:
+                    inRect = QRect(QPoint(40,40),QPoint(size.height()-40,size.height()-40))
+                    outRect = QRect(QPoint(60,60),QPoint(size.height()-60,size.height()-60))
+                    distanceName = str(angle)
+                else:
+                    outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
+                    inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+                    distanceName = ""
+                innerPath.arcMoveTo(inRect, -curAngle)
+                outerPath.arcMoveTo(outRect, -curAngle)
+                distanceNameItem = QGraphicsTextItem(distanceName)
+                #boundingItem = QGraphicsRectItem(distanceNameItem.boundingRect())
+                #boundingItem.setPos(innerPath.currentPosition())
+                offsetX = (math.sin(0.5*math.radians(curAngle) + math.pi))*distanceNameItem.boundingRect().width()
+                offsetY = (math.cos(math.radians(curAngle) - (math.pi/3)) - 1)*(distanceNameItem.boundingRect().height()/2)
+                offsetPoint = QPoint(offsetX,offsetY)
+                #print("curAngle: " + str(curAngle))
+                #print("OffsetX: " + str(offsetX))
+                #print("offsetY: " + str(offsetY))
+                
+                distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
+                
+                
+                
+                
+                #self.scene.addItem(boudningITem)
+                distanceNameItemList.append(distanceNameItem)
+                lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
+                outerPath.moveTo(lineBetween.pointAt(0))
+                outerPath.lineTo(lineBetween.pointAt(1))
+                self.scene.addPath(innerPath)
+                curAngle += angleIncr
+            chrStartAngle += chrEndAngle + 1
+            distItem = QGraphicsPathItem(outerPath)
+            self.distanceMarkerItems.append([distItem, distanceNameItemList])
+            
 
     #Imports either a tab file with specified regions to color, or a cytoband file
     def importColorTab(self):
@@ -664,6 +723,10 @@ class CircosView(QGraphicsView):
             #Update the color dict in case user modified these
             self.chromoColors[chrItem.nameString] = chrItem.brush().color()
             self.scene.removeItem(chrItem)
+        for distItem in self.distanceMarkerItems:
+            self.scene.removeItem(distItem[0])
+            for distNameItem in distItem[1]:
+                self.scene.removeItem(distNameItem)
         for index in range(len(self.chromosomes)):
              for connItem in self.chromosomes[index].connection_list:
                   self.scene.removeItem(connItem[0])
@@ -672,6 +735,7 @@ class CircosView(QGraphicsView):
         self.scene.markedChromItems = []
         self.chromosomeItems = []
         self.coverageItems = []
+        self.distanceMarkerItems = []
         for index in range(len(self.chromosomes)):
              self.chromosomes[index].connection_list = []
         self.chromosome_angle_list = [None]*24
@@ -679,11 +743,16 @@ class CircosView(QGraphicsView):
         self.makeItems()
         self.createCoverage()
         self.drawConnections()
+        self.createDistanceMarkers()
         for chrItem in self.chromosomeItems:
             self.scene.addItem(chrItem)
         for index in range(len(self.chromosomes)):
              for connItem in self.chromosomes[index].connection_list:
                  self.scene.addItem(connItem[0])
+        for distItem in self.distanceMarkerItems:
+            self.scene.addItem(distItem[0])
+            for distNameItem in distItem[1]:
+                self.scene.addItem(distNameItem)
         #For more convenient coloring, create a new graphics item consisting of all coverages added together
         completeCoveragePath = QPainterPath()
         for covItem in self.coverageItems:
