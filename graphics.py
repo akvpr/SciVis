@@ -73,7 +73,7 @@ class WGSView(QMainWindow):
         viewPixMap = QPixmap.grabWidget(view)
         viewPixMap.save(savePath)
 
-    #Checks if an active scene is running and if it's ok to continue scene change
+    #Checks if an active scene is running and if it's ok to continue (closing scene?)
     def confirmChange(self):
         if self.activeScene:
             newSceneDialog = QDialog()
@@ -159,11 +159,14 @@ class WGSView(QMainWindow):
         dataItem.setData(itemData)
         #Vcf and tab names should be child items
         vcfItem = QStandardItem(vcfName)
-        vcfItem.setEnabled(False)
+        vcfItem.setEditable(False)
+        vcfItem.setSelectable(True)
         tabItem = QStandardItem(tabName)
-        tabItem.setEnabled(False)
+        tabItem.setEditable(False)
+        tabItem.setSelectable(True)
         cytoItem = QStandardItem(cytoName)
-        cytoItem.setEnabled(False)
+        cytoItem.setEditable(False)
+        cytoItem.setSelectable(True)
         dataItem.appendRow(vcfItem)
         dataItem.appendRow(tabItem)
         dataItem.appendRow(cytoItem)
@@ -205,16 +208,44 @@ class WGSView(QMainWindow):
                 #Create a model item to be used for viewing datasets
                 self.createDatasetItem(reader, setName)
 
+    def editDataset(self,index):
+        #User might have clicked on a child item with no data -- try to get parent item if so
+        if index.isValid() and not self.datasetModel.itemFromIndex(index).hasChildren():
+            index = index.parent()
+        if index.isValid():
+            tabFile = QFileDialog.getOpenFileName(None,"Specify TAB file",self.defaultFolder,
+            "TAB files (*.tab)")[0]
+            vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
+            "VCF files (*.vcf)")[0]
+            cytoFile = "cytoBand.txt"
+            #Cancel results in empty string, only go ahead if not empty
+            if tabFile and vcfFile:
+                reader = data.Reader()
+                self.statusBar().showMessage("Reading TAB..")
+                reader.readTab(tabFile)
+                self.statusBar().showMessage("Reading VCF..")
+                reader.readVCFFile(vcfFile)
+                self.statusBar().showMessage("Reading cytoband file..")
+                reader.readCytoTab(cytoFile)
+                self.statusBar().clearMessage()
+                #Remove current item from model, create a new item, insert item
+                oldItem = self.datasetModel.itemFromIndex(index)
+                setName = oldItem.data()["setName"]
+                oldRow = index.row()
+                self.datasetModel.removeRow(oldRow)
+                self.createDatasetItem(reader, setName)
+
     #Opens a window showing existing datasets
     def viewDatasets(self):
         dataList = QTreeView()
         dataList.setModel(self.datasetModel)
         dataList.setHeaderHidden(True)
+        dataList.setSelectionMode(QAbstractItemView.SingleSelection)
         datasetDia = QDialog(self)
         datasetDia.setWindowTitle("Data sets")
+        #Connects to edit function with selected index
         editButton = QPushButton('Edit set', datasetDia)
-        #Should connect to function to edit a chosen set
-        #editButton.clicked.connect(datasetDia.accept)
+        editButton.clicked.connect(lambda: self.editDataset(dataList.currentIndex()))
         newButton = QPushButton('New set', datasetDia)
         newButton.clicked.connect(self.createNewDataset)
         loadButton = QPushButton('Load set', datasetDia)
@@ -233,8 +264,13 @@ class WGSView(QMainWindow):
     def selectDataset(self):
         dataList = QTreeView()
         dataList.setModel(self.datasetModel)
+        dataList.setHeaderHidden(True)
+        dataList.setSelectionMode(QAbstractItemView.SingleSelection)
+        dataList.setSelectionBehavior(QAbstractItemView.SelectRows)
         datasetDia = QDialog(self)
         datasetDia.setWindowTitle("Choose data set")
+        #Connect double click signal to dialog accept
+        dataList.doubleClicked.connect(datasetDia.accept)
         selectButton = QPushButton('Select set', datasetDia)
         selectButton.clicked.connect(datasetDia.accept)
         newButton = QPushButton('New set', datasetDia)
@@ -245,6 +281,9 @@ class WGSView(QMainWindow):
         datasetDia.layout.addWidget(newButton,1,1,1,1)
         choice = datasetDia.exec_()
         selectedIndex = dataList.currentIndex()
+        #User might have clicked on a child item with no data -- try to get parent item if so
+        if selectedIndex.isValid() and not self.datasetModel.itemFromIndex(selectedIndex).hasChildren():
+            selectedIndex = selectedIndex.parent()
         #Only return a dataset if user has accepted and selection is valid
         if choice == QDialog.Accepted and selectedIndex.isValid():
             selectedItem = self.datasetModel.itemFromIndex(selectedIndex)
@@ -263,6 +302,7 @@ class WGSView(QMainWindow):
             self.tools.destroy()
             self.fileMenu.removeAction(self.viewSettingsAct)
             self.fileMenu.removeAction(self.exportImageAct)
+            self.fileMenu.removeAction(self.exitAct)
         except:
             pass
         self.lastActiveView = view
@@ -271,6 +311,7 @@ class WGSView(QMainWindow):
         self.viewSettingsAct.triggered.connect(view.viewSettings)
         self.fileMenu.addAction(self.viewSettingsAct)
         self.fileMenu.addAction(self.exportImageAct)
+        self.fileMenu.addAction(self.exitAct)
         #Add appropriate toolbar for scene type
         viewType = view.type
         if viewType == "circos":
