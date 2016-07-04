@@ -350,9 +350,12 @@ class WGSView(QMainWindow):
             self.tools = self.addToolBar('Karyogram tools')
             self.updateKaryogramAct = QAction('Update karyogram', self)
             self.updateKaryogramAct.triggered.connect(view.updateItems)
+            self.resetLayoutAct = QAction('Reset layout', self)
+            self.resetLayoutAct.triggered.connect(view.resetLayout)
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.showChInfo)
             self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.resetLayoutAct)
             self.tools.addAction(self.updateKaryogramAct)
             self.tools.show()
         if viewType == "heatmap":
