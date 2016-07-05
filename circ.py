@@ -13,6 +13,7 @@ class CircView(QGraphicsView):
         super().__init__(self.scene)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.numChr = len(self.chromosomes)
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
@@ -44,11 +45,12 @@ class CircView(QGraphicsView):
         self.createChInfo()
 
         self.chromosomeItems = []
+        self.chromosome_angle_list = {}
         #Create a dict representing colors for the 24 default chromosomes
         self.chromoColors = {}
         color = self.startColor
-        for i in range(24):
-            self.chromoColors[self.chromosomes[i].name] = color
+        for chromo in self.chromosomes:
+            self.chromoColors[chromo.name] = color
             color = color.darker(105)
         self.initscene()
         self.showChInfo()
@@ -461,8 +463,7 @@ class CircView(QGraphicsView):
             inner.arcTo(innerChrRect,-curAngle, -angleIncr+1)
             #Saving the angles for later use, see drawConnections
             angles = [curAngle, angleIncr]
-            del self.chromosome_angle_list[self.chromosomes.index(chromo)]
-            self.chromosome_angle_list.insert(self.chromosomes.index(chromo), angles)
+            self.chromosome_angle_list[chromo.name] = angles
             curAngle += angleIncr
             #Removes any leftover painting path that may cause ugly lines in the middle
             leftoverArea = QPainterPath()
@@ -537,36 +538,30 @@ class CircView(QGraphicsView):
         outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
         innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
         counter = 0
-        for index in range(len(self.chromosomes)):
-            if not self.chromosomes[index].display_connections & self.chromosomes[index].display:
+        for chrA in self.chromosomeDict.values():
+            if not (chrA.display_connections and chrA.display):
                 continue
             #only create the connection list if it has not been initialized earlier
-            if not self.chromosomes[index].connections:
-                self.chromosomes[index].createConnections()
-            for connection in self.chromosomes[index].connections:
-                #The information is stored as string elements and needs to be converted to integers
-                if connection[1] == 'X':
-                    ChrB=23
-                elif connection[1] == 'Y':
-                    ChrB=24
-                elif connection[1].startswith('G'):
+            if not chrA.connections:
+                chrA.createConnections()
+            for connection in chrA.connections:
+                chrB = self.chromosomeDict[connection[1]]
+                if chrB.name.startswith('G') or chrB.name == 'MT':
                     continue
-                else:
-                    ChrB = int(connection[1])
-                if not self.chromosomes[ChrB-1].display:
+                if not chrB.display:
                     continue
                 #The curAngle determines where on the circle the chromosome is located (also used in makeItems)
-                curAngle_A = self.chromosome_angle_list[index][0]
-                curAngle_B = self.chromosome_angle_list[ChrB-1][0]
+                curAngle_A = self.chromosome_angle_list[chrA.name][0]
+                curAngle_B = self.chromosome_angle_list[chrB.name][0]
                 #The windows of each variant (WINA, WINB) are used to determine where on the chromosome the interaction is located
                 bp_End_A = int(connection[2].split(',')[1])
-                ChrA_length = int(self.chromosomes[index].end)
+                chrA_length = int(chrA.end)
                 bp_End_B = int(connection[3].split(',')[1])
-                ChrB_length = int(self.chromosomes[ChrB-1].end)
+                chrB_length = int(chrB.end)
                 #A percentage of the total angle (used to draw the chromosome in makeItems) determines where on the
                 #chromosome the connection is located
-                angleIncr_A = (1-((ChrA_length - bp_End_A) / ChrA_length)) * (self.chromosome_angle_list[index][1]-2)
-                angleIncr_B = (1-((ChrB_length - bp_End_B) / ChrB_length)) * (self.chromosome_angle_list[ChrB-1][1]-2)
+                angleIncr_A = (1-((chrA_length - bp_End_A) / chrA_length)) * (self.chromosome_angle_list[chrA.name][1]-2)
+                angleIncr_B = (1-((chrB_length - bp_End_B) / chrB_length)) * (self.chromosome_angle_list[chrB.name][1]-2)
                 #A Path is created to assign the position for the connections
                 tempPath = QPainterPath()
                 #The arMoveTo() function is used to get the different points on each chromosome the connection is located
@@ -582,15 +577,15 @@ class CircView(QGraphicsView):
                 #The path is converted to a graphics path item
                 connectionItem = QGraphicsPathItem(connectionPath)
                 #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
-                pen = QPen(self.chromoColors[self.chromosomes[ChrB-1].name], self.connWidth)
+                pen = QPen(self.chromoColors[chrB.name], self.connWidth)
                 connectionItem.setPen(pen)
                 #Creating a rectangle (1x1 pixels) around each posB point for use when heat mapping the connections
                 rect = QRect(posB.toPoint(),QSize(1,1))
                 rect.moveCenter(posB.toPoint())
                 #self.scene.addItem(QGraphicsRectItem(rect))
-                connectionInfo = [connectionItem, rect, posA, posB, (ChrB-1), counter]
+                connectionInfo = [connectionItem, rect, posA, posB, chrB, counter]
                 #The item is added to a list
-                self.chromosomes[index].connection_list.append(connectionInfo)
+                chrA.connection_list.append(connectionInfo)
                 counter = counter + 1
 
         #Checking to see if any neighbouring connections are close to eachother, if they are -> create a color gradient for both the
@@ -604,20 +599,17 @@ class CircView(QGraphicsView):
                             continue
                         if connItem1[1].intersects(connItem2[1]):
                             linearGrad = QLinearGradient(connItem1[2], connItem1[3])
-                            linearGrad.setColorAt(0, self.chromoColors[self.chromosomes[connItem1[4]].name])
-                            linearGrad.setColorAt(1, self.chromoColors[self.chromosomes[connItem1[4]].name].darker(300))
+                            linearGrad.setColorAt(0, self.chromoColors[connItem1[4].name])
+                            linearGrad.setColorAt(1, self.chromoColors[connItem1[4].name].darker(300))
                             connItem1[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
                             connItem2[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
 
     def numDispChromosomes(self):
         dispChromos = 0
-
         for chromo in self.chromosomes:
             if chromo.display:
                 dispChromos += 1
-
         return dispChromos
-
 
     def createDistanceMarkers(self):
         size = self.size()
@@ -821,7 +813,6 @@ class CircView(QGraphicsView):
         self.legendItems = []
         for index in range(len(self.chromosomes)):
              self.chromosomes[index].connection_list = []
-        self.chromosome_angle_list = [None]*24
         #Create new graphics items, add these to the scene.
         self.makeItems()
         self.createCoverage()

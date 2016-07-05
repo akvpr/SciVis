@@ -208,7 +208,7 @@ class Chromosome():
         self.start = start
         self.coverage = []
         self.coverageLog = []
-        self.display = True
+        self.display = False
         self.variants = []
         self.connections = []
         self.connection_list = []
@@ -228,19 +228,22 @@ class Chromosome():
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
         #The variants are by default set to be shown
         display_variant = True
-        #For every variant we would like the genes in CSQ
-        csqField = description["CSQ"]
-        #The CSQ field has several sub-fields, each separated with ','
-        subList = csqField.split(',')
-        geneList = []
-        for subIndex in range(len(subList)):
-            #The gene name field is always the fourth element in the CSQ field separated with '|'
-            subSubList = subList[subIndex].split('|')
-            geneList.append(subSubList[3])
-        #Convert the list to a set to remove any duplicates
-        geneSet = set(geneList)
-        s = ', '
-        allGenes = s.join(geneSet)
+        #For every variant we would like the genes in CSQ, if this exists
+        if "CSQ" in description:
+            csqField = description["CSQ"]
+            #The CSQ field has several sub-fields, each separated with ','
+            subList = csqField.split(',')
+            geneList = []
+            for subIndex in range(len(subList)):
+                #The gene name field is always the fourth element in the CSQ field separated with '|'
+                subSubList = subList[subIndex].split('|')
+                geneList.append(subSubList[3])
+            #Convert the list to a set to remove any duplicates
+            geneSet = set(geneList)
+            s = ', '
+            allGenes = s.join(geneSet)
+        else:
+            allGenes = ""
         #We would also like the CYTOBAND field, if this exists
         if "CYTOBAND" in description:
             cband = description["CYTOBAND"]
