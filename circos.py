@@ -27,7 +27,7 @@ class CircosView(QGraphicsView):
         self.activeVariantTables = {}
 
         self.bpWindow = 500
-        self.bpDistanceResolution = 100
+        self.bpDistanceResolution = 10
         self.useCoverageLog = True
         self.minCoverage = 0.5
         self.maxCoverage = 1.5
@@ -265,7 +265,9 @@ class CircosView(QGraphicsView):
             infoitem.append(QStandardItem(variant[4]))
             #this is posA in the variant
             startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
+            startData = QStandardItem()
+            startData.setData(variant[1],0)
+            infoitem.append(startData)
             #this is posB or chrB: posB in the variant (if interchromosomal)
             if variant[0] is not variant[2]:
                 endText = str(variant[2]) + ": " + str(variant[3])
@@ -302,18 +304,38 @@ class CircosView(QGraphicsView):
             varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
 
+            varList.setSortingEnabled(True)
             varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
-
+            varList.horizontalHeader
+            varList.horizontalHeader().sectionClicked.connect(lambda: self.sortVarList(varList,chromo))
+            varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
+            #self.sortVarList()
+            
+            
             self.activeVariantTables[chromo.name] = varList
 
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
+            
+    def sortVarList(self, varList, chromo):
+        activeSortType = chromo.activeSortType
+        if activeSortType == 5:
+            if chromo.sorted['START']:
+                order = Qt.DescendingOrder
+            else:
+                order = Qt.AscendingOrder
+            varList.sortByColumn(1, order)
+        
+        
+        
+        
+        
 
     def toggleVariants(self, chromoName, chromoIndex):
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()

@@ -214,6 +214,8 @@ class Chromosome():
         self.connection_list = []
         self.display_connections = False
         self.display_cytoBandNames = False
+        self.sorted = {'TYPE':False, 'START':False, 'END':False, 'GENE(S)':False, 'CYTOBAND':False}
+        self.activeSortType = -1
 
     def addCoverage(self, coverageValue):
         self.coverage.append(coverageValue)
@@ -225,6 +227,57 @@ class Chromosome():
     def setEnd(self,end):
         self.end = end
 
+    def sortVariants(self, headerIndex):
+        #HEADERS: ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Active']
+        if headerIndex == 0:
+            self.activeSortType = 0
+            if not self.sorted['TYPE']:
+                self.variants.sort(key=lambda x: x[4])
+                self.sorted['TYPE'] = True
+            else:
+                self.variants.sort(key=lambda x: x[4], reverse=True)
+                self.sorted['TYPE'] = False
+        elif headerIndex == 1:
+            self.activeSortType = 1
+            if not self.sorted['START']:
+                self.variants.sort(key=lambda x: x[1])
+                self.sorted['START'] = True
+            else:
+                self.variants.sort(key=lambda x: x[1], reverse=True)
+                self.sorted['START'] = False
+        elif headerIndex == 2:
+            self.activeSortType = 2
+            if not self.sorted['END']:
+                self.variants.sort(key=lambda x: x[3])
+                self.sorted['END'] = True
+            else:
+                self.variants.sort(key=lambda x: x[3], reverse=True)
+                self.sorted['END'] = False
+        elif headerIndex == 3:
+            self.activeSortType = 3
+            if not self.sorted['GENE(S)']:
+                self.variants.sort(key=lambda x: x[7])
+                self.sorted['GENE(S)'] = True
+            else:
+                self.variants.sort(key=lambda x: x[7], reverse=True)
+                self.sorted['GENE(S)'] = False
+        elif headerIndex == 4:
+            self.activeSortType = 4
+            if not self.sorted['CYTOBAND']:
+                self.variants.sort(key=lambda x: x[8])
+                self.sorted['CYTOBAND'] = True
+            else:
+                self.variants.sort(key=lambda x: x[8], reverse=True)
+                self.sorted['CYTOBAND'] = False 
+        elif headerIndex == 5:
+            self.activeSortType = 5
+            if not self.sorted['START']:
+                self.variants.sort(key=lambda x: x[1])
+                self.sorted['START'] = True
+            else:
+                self.variants.sort(key=lambda x: x[1], reverse=True)
+                self.sorted['START'] = False 
+        
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
         #The variants are by default set to be shown
         display_variant = True
