@@ -1,5 +1,6 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
+import math
 
 class KaryogramView(QGraphicsView):
 
@@ -9,9 +10,12 @@ class KaryogramView(QGraphicsView):
         self.dataDict = dataDict
         super().__init__(self.scene)
         self.chromosomes = self.dataDict['chromosomeList']
+        self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
         self.numDispChromos = 24
+        self.itemsPerRow = 6
         self.cytoGraphicItems = {}
+        self.cytoGraphicItemPositions = {}
         self.connectionGraphicItems = []
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
@@ -37,8 +41,16 @@ class KaryogramView(QGraphicsView):
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
         #create header labels to distinguish different settings.
-        verticalHeaders = []
+        verticalHeaders = ["itemsPerRow"]
         self.settingsModel.setVerticalHeaderLabels(verticalHeaders)
+        itemsPerRowText = QStandardItem("Items per row")
+        itemsPerRowText.setEditable(False)
+        itemsPerRowText.setToolTip("Maximum of chromosomes to display per row in the scene")
+        itemsPerRowData = QStandardItem()
+        itemsPerRowData.setData(self.itemsPerRow,0)
+        itemsPerRowData.setEditable(True)
+        self.settingsModel.setItem(0,0,itemsPerRowText)
+        self.settingsModel.setItem(0,1,itemsPerRowData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
         self.colorModel = QStandardItemModel()
         stainItems = []
@@ -57,7 +69,8 @@ class KaryogramView(QGraphicsView):
         self.colorModel.appendColumn(colorItems)
 
     def updateSettings(self,item):
-        pass
+        if item.row() == 0:
+            self.itemsPerRow = item.data(0)
 
     def viewSettings(self):
         self.settingsList = QTableView()
@@ -84,6 +97,21 @@ class KaryogramView(QGraphicsView):
         self.settingsDia.layout.addWidget(self.colorList,0,2,1,2)
         self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
         self.settingsDia.show()
+
+    #Updates display toggles according to this scene's active chModel
+    def updateToggles(self):
+        for row in range(self.chModel.rowCount()):
+            dispConnItem = self.chModel.item(row,4)
+            dispItem = self.chModel.item(row,3)
+            if (dispItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display = True
+            else:
+                self.chromosomes[row].display = False
+            if (dispConnItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display_connections = True
+            else:
+                self.chromosomes[row].display_connections = False
+        self.updateItems()
 
     #Creates data model for info window
     def createChInfo(self):
@@ -327,18 +355,25 @@ class KaryogramView(QGraphicsView):
                     maxBp = int(chromo.end)
 
             #Lays out items vetically with equal spacing between each other, with a width depending on screen size
-            currentXPosition = 100
+            currentXPosition = 0
             xIncrement = (containerRect.width() / self.numDispChromos) + 60
             self.chromoWidth = containerRect.width() / 48
+            counter = 0
+            numRows = math.ceil(24 / self.itemsPerRow)
+            displaceY = 0
+            longestItemInRow = 0
 
             #Create the graphic items for each chromosome if they are set to be displayed
             for chromo in self.chromosomes:
                 if not chromo.display or "GL" in chromo.name or "MT" in chromo.name:
                     continue
                 chromoHeight = (int(chromo.end)/maxBp)*(containerRect.height())
+                if chromoHeight > longestItemInRow:
+                    longestItemInRow = chromoHeight
                 bandItems = []
                 textItems = []
                 placeLeft = True
+                firstAcen = True
                 #Find each cytoband for this chromosome, and create band items using this data
                 for cyto in self.cytoInfo:
                     if cyto[0] == chromo.name:
@@ -349,8 +384,49 @@ class KaryogramView(QGraphicsView):
                         bandYPos = (cytoStart / int(chromo.end)) * (chromoHeight)
                         bandXPos = currentXPosition
                         bandWidth = self.chromoWidth
-                        #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
-                        bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
+                        #If first item, round on top
+                        if cytoStart is 0:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setBottom(rect.bottom() + rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        #If first acen, round on bottom
+                        elif cyto[4] == 'acen' and firstAcen:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                            firstAcen = False
+                        #If second acen, round on top
+                        elif cyto[4] == 'acen':
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setBottom(rect.bottom() + rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        #If last item, round on bottom (i.e. last index in last chr or new chr next on next index)
+                        elif self.cytoInfo.index(cyto) == len(self.cytoInfo)-1:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        elif self.cytoInfo[self.cytoInfo.index(cyto)+1][0] != chromo.name:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        else:
+                            #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
+                            bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                         bandRectItem.setBrush(self.colors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
@@ -372,19 +448,59 @@ class KaryogramView(QGraphicsView):
                 textItems.append(chromoNameItem)
                 #Create a custom graphic item group from created items, enter in dict
                 cytoItem = KaryoGraphicItem(bandItems,textItems,chromo.name)
+                cytoItem.moveBy(0,displaceY)
                 self.cytoGraphicItems[chromo.name] = cytoItem
                 currentXPosition += xIncrement
                 self.scene.addItem(cytoItem)
+                counter += 1
+                if counter%self.itemsPerRow == 0:
+                    currentXPosition = 0
+                    displaceY += longestItemInRow + 30
+                    longestItemInRow = 0
 
     def updateItems(self):
-        self.scene.clear()
+        #Save any old positions of items in case they have been moved by the user
+        for graphicItem in self.cytoGraphicItems.values():
+            self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
+            try:
+                self.scene.removeItem(graphicItem)
+            except:
+                pass
+        for connItem in self.connectionGraphicItems:
+            try:
+                self.scene.removeItem(connItem)
+            except:
+                pass
+        self.createChromosomeItems()
+        #Move back the items to their old positions
+        for graphicItem in self.cytoGraphicItems.values():
+            if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
+                graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
+        self.drawConnections()
+        self.update()
+
+    #Rearranges the graphic items to their default position
+    def resetLayout(self):
+        for graphicItem in self.cytoGraphicItems.values():
+            try:
+                self.scene.removeItem(graphicItem)
+            except:
+                pass
+        for connItem in self.connectionGraphicItems:
+            try:
+                self.scene.removeItem(connItem)
+            except:
+                pass
         self.createChromosomeItems()
         self.drawConnections()
         self.update()
 
     def updateConnections(self):
         for item in self.connectionGraphicItems:
-            self.scene.removeItem(item)
+            try:
+                self.scene.removeItem(item)
+            except:
+                pass
         self.drawConnections()
         self.update()
 

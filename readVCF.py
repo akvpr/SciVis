@@ -1,3 +1,5 @@
+#author J35P312 - http://github.com/J35P312/SVDB
+
 import sys,re
 
 def readVCFLine(line):
@@ -34,7 +36,7 @@ def readVCFLine(line):
             for i in range(0,len(format_keys)):
                 format[format_keys[i]].append(format_string[i])
                 i += 1
-           
+
     #Delly translocations
     if("TRA" in variation[4]):
         event_type="BND"
@@ -43,7 +45,7 @@ def readVCFLine(line):
         if chrA > chrB:
             chrT= chrA
             chrA = chrB
-            
+
             chrB= chrT
             tmpPos=posB
             posB=posA
@@ -51,7 +53,7 @@ def readVCFLine(line):
 
     #intrachromosomal variant
     elif(not  "]" in variation[4] and not "[" in variation[4]):
-        
+
         chrB=chrA;
         posB=int(description["END"]);
         #sometimes the fermikit intra chromosomal events are inverted i.e the end pos is a lower position than the start pos
@@ -85,14 +87,14 @@ def readVCFLine(line):
                     chrT = chrA
                     chrA = chrB
                     chrB = chrT
-                        
+
                     tmpPos=posB
                     posB=posA
                     posA=tmpPos
                 elif chrA == chrB and posA > posB:
                     tmpPos=posB
                     posB=posA
-                    posA=tmpPos                   
-                
+                    posA=tmpPos
+
         event_type="BND"
     return( chrA, posA, chrB, posB,event_type,description,format);

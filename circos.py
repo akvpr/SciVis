@@ -23,7 +23,7 @@ class CircosView(QGraphicsView):
         self.chromosome_connection_list = []
         self.regionItems = []
         self.legendItems = []
-        self.activeVariantModels = {} 
+        self.activeVariantModels = {}
         self.activeVariantTables = {}
 
         self.bpWindow = 500
@@ -32,7 +32,6 @@ class CircosView(QGraphicsView):
         self.minCoverage = 0.5
         self.maxCoverage = 1.5
         self.startColor = QColor.fromRgb(243,241,172)
-        self.numDispChromos = 23
         self.connWidth = 1
         self.showChrNames = True
         self.createSettings()
@@ -169,6 +168,21 @@ class CircosView(QGraphicsView):
                 totalDispBP += int(chromo.end)
         return totalDispBP
 
+    #Updates display toggles according to this scene's active chModel
+    def updateToggles(self):
+        for row in range(self.chModel.rowCount()):
+            dispConnItem = self.chModel.item(row,4)
+            dispItem = self.chModel.item(row,3)
+            if (dispItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display = True
+            else:
+                self.chromosomes[row].display = False
+            if (dispConnItem.checkState() == Qt.Checked):
+                self.chromosomes[row].display_connections = True
+            else:
+                self.chromosomes[row].display_connections = False
+        self.initscene()
+
     #Creates data model for info window
     def createChInfo(self):
         self.chModel = QStandardItemModel()
@@ -267,9 +281,9 @@ class CircosView(QGraphicsView):
             dispCheckItem.setCheckable(False)
             dispCheckItem.setCheckState(Qt.Checked)
             infoitem.append(dispCheckItem)
-            
+
             varModel.appendRow(infoitem)
-            
+
         self.activeVariantModels[chromo.name] = varModel
 
     #Creates a popup containing variant info in a table.
@@ -287,22 +301,21 @@ class CircosView(QGraphicsView):
             #Create button for activation of variants
             varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
-            
+
             varList.setMinimumSize(500,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
-            
+
             self.activeVariantTables[chromo.name] = varList
-            
+
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
-            
+
     def toggleVariants(self, chromoName, chromoIndex):
-            
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
@@ -317,9 +330,7 @@ class CircosView(QGraphicsView):
                 self.chromosomes[chromoIndex].variants[row][9] = True
         self.chromosomes[chromoIndex].createConnections()
         self.initscene()
-        
-                
-                
+
     def addVariant(self):
         #Adds a variant to selected chromosomes. Some models still have to be updated.
         #Not sure how to best handle input yet.
@@ -402,11 +413,9 @@ class CircosView(QGraphicsView):
                 self.chromosomes[row].display = False
                 dispConnItem.setCheckState(Qt.Unchecked)
                 self.chromosomes[row].display_connections = False
-                self.numDispChromos -= 1
             else:
                 dispItem.setCheckState(Qt.Checked)
                 self.chromosomes[row].display = True
-                self.numDispChromos += 1
         self.initscene()
 
     def toggleConnections(self):
@@ -599,17 +608,17 @@ class CircosView(QGraphicsView):
                             linearGrad.setColorAt(1, self.chromoColors[self.chromosomes[connItem1[4]].name].darker(300))
                             connItem1[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
                             connItem2[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
-                            
+
     def numDispChromosomes(self):
         dispChromos = 0
-        
+
         for chromo in self.chromosomes:
             if chromo.display:
                 dispChromos += 1
-                
+
         return dispChromos
 
-                          
+
     def createDistanceMarkers(self):
         size = self.size()
         totalDispBP = self.returnTotalDisplayedBP()
@@ -643,7 +652,7 @@ class CircosView(QGraphicsView):
                     inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
                     distanceName = ""
                 textHeight = 20
-                textWidth = 13 if curAngle<10 else 18 
+                textWidth = 13 if curAngle<10 else 18
                 innerPath.arcMoveTo(inRect, -curAngle)
                 outerPath.arcMoveTo(outRect, -curAngle)
                 distanceNameItem = QGraphicsTextItem(distanceName)
@@ -658,27 +667,27 @@ class CircosView(QGraphicsView):
                     offsetX = -0.5
                 elif curAngle >= 292 and curAngle <= 360:
                     offsetX = 0
-                    
+
                 offsetX = offsetX*textWidth
-                offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight               
+                offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight
                 offsetPoint = QPointF(offsetX,offsetY)
-                
+
                 distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
                 distanceNameItemList.append(distanceNameItem)
-                
+
                 lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
                 outerPath.moveTo(lineBetween.pointAt(0))
                 outerPath.lineTo(lineBetween.pointAt(1))
                 self.scene.addPath(innerPath)
                 angleCounter += 1
                 curAngle += angleIncr
-                
+
             chrStartAngle += chrEndAngle + 1
-            
+
             distItem = QGraphicsPathItem(outerPath)
             self.distanceMarkerItems.append([distItem, distanceNameItemList])
-            
-            
+
+
         for incr in range(11):
             if incr%10 == 0:
                 lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
@@ -695,7 +704,7 @@ class CircosView(QGraphicsView):
         #lineBetweenStart = QLineF(outRect.width(),outRect.height(), outRect.width(), outRect.height()-20)
         #lineBetweenEnd = QLineF(outRect.width()+100,outRect.height(), outRect.width()+100, outRect.height()-20)
         lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
-        
+
         #legendNameItem = QGraphicsTextItem("")
         legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
         legendPath = QPainterPath()
@@ -793,11 +802,18 @@ class CircosView(QGraphicsView):
         for legendItem in self.legendItems:
             self.scene.removeItem(legendItem[0])
             self.scene.removeItem(legendItem[1])
+
         for index in range(len(self.chromosomes)):
              for connItem in self.chromosomes[index].connection_list:
-                  self.scene.removeItem(connItem[0])
+                 try:
+                     self.scene.removeItem(connItem[0])
+                 except:
+                     pass
         for regionItem in self.regionItems:
-            self.scene.removeItem(regionItem)
+            try:
+                self.scene.removeItem(regionItem)
+            except:
+                pass
         self.scene.markedChromItems = []
         self.chromosomeItems = []
         self.coverageItems = []

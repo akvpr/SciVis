@@ -268,5 +268,3 @@ class Chromosome():
                 else:
                     connection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), cband]
                     self.connections.append(connection)
-         
-                
