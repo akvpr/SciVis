@@ -373,6 +373,7 @@ class KaryogramView(QGraphicsView):
                 bandItems = []
                 textItems = []
                 placeLeft = True
+                firstAcen = True
                 #Find each cytoband for this chromosome, and create band items using this data
                 for cyto in self.cytoInfo:
                     if cyto[0] == chromo.name:
@@ -383,8 +384,49 @@ class KaryogramView(QGraphicsView):
                         bandYPos = (cytoStart / int(chromo.end)) * (chromoHeight)
                         bandXPos = currentXPosition
                         bandWidth = self.chromoWidth
-                        #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
-                        bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
+                        #If first item, round on top
+                        if cytoStart is 0:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setBottom(rect.bottom() + rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        #If first acen, round on bottom
+                        elif cyto[4] == 'acen' and firstAcen:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                            firstAcen = False
+                        #If second acen, round on top
+                        elif cyto[4] == 'acen':
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setBottom(rect.bottom() + rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        #If last item, round on bottom (i.e. last index in last chr or new chr next on next index)
+                        elif self.cytoInfo.index(cyto) == len(self.cytoInfo)-1:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        elif self.cytoInfo[self.cytoInfo.index(cyto)+1][0] != chromo.name:
+                            rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rect.setTop(rect.top() - rect.height())
+                            roundPath = QPainterPath(rect.center())
+                            roundPath.arcTo(rect,0,-180)
+                            roundPath.closeSubpath()
+                            bandRectItem = QGraphicsPathItem(roundPath)
+                        else:
+                            #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
+                            bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                         bandRectItem.setBrush(self.colors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
