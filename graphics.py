@@ -1,6 +1,6 @@
 import sys
 import data
-import circos
+import circ
 import coverage
 import karyogram
 import heatmap
@@ -29,7 +29,7 @@ class WGSView(QMainWindow):
         #Adds a status bar to the main window
         self.statusBar()
         #Create actions for menus and toolbars, connect to functions
-        self.newCircAct = QAction('New CIRCOS',self)
+        self.newCircAct = QAction('New circular diagram',self)
         self.newCircAct.triggered.connect(self.newCirc)
         self.newCovDiagramAct = QAction('New coverage diagram',self)
         self.newCovDiagramAct.triggered.connect(self.newCovDiagram)
@@ -314,12 +314,12 @@ class WGSView(QMainWindow):
         self.fileMenu.addAction(self.exitAct)
         #Add appropriate toolbar for scene type
         viewType = view.type
-        if viewType == "circos":
+        if viewType == "circ":
             view.updateToggles()
-            self.tools = self.addToolBar('Circos tools')
+            self.tools = self.addToolBar('Circ tools')
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.showChInfo)
-            self.updateSceneAct = QAction('Update CIRCOS',self)
+            self.updateSceneAct = QAction('Update diagram',self)
             self.updateSceneAct.triggered.connect(view.initscene)
             self.toggleCoverageAct = QAction('Toggle coverage',self)
             self.toggleCoverageAct.triggered.connect(view.toggleCoverage)
@@ -371,18 +371,18 @@ class WGSView(QMainWindow):
             self.tools.addAction(self.updateLayoutAct)
             self.tools.show()
 
-    #Creates and initializes a new circos diagram
+    #Creates and initializes a new circular diagram
     def newCirc(self):
 
-        self.statusBar().showMessage("Initializing new CIRCOS..")
+        self.statusBar().showMessage("Initializing new circular diagram..")
         selectedData = self.selectDataset()
         self.statusBar().clearMessage()
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = circos.CircosView(selectedData)
+            view = circ.CircView(selectedData)
             self.views.append(view)
-            tabIndex = self.sceneTabs.addTab(view,"Circos")
+            tabIndex = self.sceneTabs.addTab(view,"Circular")
             self.sceneTabs.setCurrentIndex(tabIndex)
             self.show()
 

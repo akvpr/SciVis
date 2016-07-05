@@ -5,11 +5,11 @@ import data
 from PySide.QtCore import *
 from PySide.QtGui import *
 
-class CircosView(QGraphicsView):
+class CircView(QGraphicsView):
 
     def __init__(self,dataDict):
-        self.type = "circos"
-        self.scene = CircosScene()
+        self.type = "circ"
+        self.scene = CircScene()
         super().__init__(self.scene)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
@@ -106,7 +106,7 @@ class CircosView(QGraphicsView):
         connPenWidthData.setEditable(True)
         showChrNameText = QStandardItem("Show chromosome names")
         showChrNameText.setEditable(False)
-        showChrNameText.setToolTip("Show or hide the chromosome names on the circos diagram")
+        showChrNameText.setToolTip("Show or hide the chromosome names on the circular diagram")
         showChrNameCheck = QStandardItem()
         showChrNameCheck.setCheckable(True)
         showChrNameCheck.setCheckState(Qt.Checked)
@@ -915,7 +915,7 @@ class ChromoGraphicItem(QGraphicsPathItem):
         painter.drawText(self.path().boundingRect().center(),self.nameString)
 
 #Subclass of graphics scene for custom handling of mouse events
-class CircosScene(QGraphicsScene):
+class CircScene(QGraphicsScene):
 
     def __init__(self):
         super().__init__()
