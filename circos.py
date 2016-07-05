@@ -22,10 +22,12 @@ class CircosView(QGraphicsView):
         self.distanceMarkerItems = []
         self.chromosome_connection_list = []
         self.regionItems = []
+        self.legendItems = []
         self.activeVariantModels = {} 
         self.activeVariantTables = {}
 
         self.bpWindow = 500
+        self.bpDistanceResolution = 100
         self.useCoverageLog = True
         self.minCoverage = 0.5
         self.maxCoverage = 1.5
@@ -64,7 +66,7 @@ class CircosView(QGraphicsView):
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
         #create header labels to distinguish different settings.
-        verticalHeaders = ["bpWindow", "useCoverageLog", "minCoverage", "maxCoverage", "connectionWidth"]
+        verticalHeaders = ["bpWindow", "distanceMarkerResolution", "useCoverageLog", "minCoverage", "maxCoverage", "connectionWidth"]
         self.settingsModel.setVerticalHeaderLabels(verticalHeaders)
         bpWinText = QStandardItem("BP Resolution (kb)")
         bpWinText.setEditable(False)
@@ -72,6 +74,12 @@ class CircosView(QGraphicsView):
         bpWinData = QStandardItem()
         bpWinData.setData(self.bpWindow,0)
         bpWinData.setEditable(True)
+        distResText = QStandardItem("Distance between each marker (Mb)")
+        distResText.setEditable(False)
+        distResText.setToolTip("Set the distance between each marker around the circle")
+        distResData = QStandardItem()
+        distResData.setData(self.bpDistanceResolution,0)
+        distResData.setEditable(True)
         useCovLog = QStandardItem("Use log2 of coverage")
         useCovLog.setEditable(False)
         useCovLog.setToolTip("Use log2(value) for coverage values when displaying coverage graph?")
@@ -106,16 +114,18 @@ class CircosView(QGraphicsView):
         showChrNameCheck.setEditable(False)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
-        self.settingsModel.setItem(1,0,useCovLog)
-        self.settingsModel.setItem(1,1,useCovLogCheck)
-        self.settingsModel.setItem(2,0,minCovLimitText)
-        self.settingsModel.setItem(2,1,minCovLimitData)
-        self.settingsModel.setItem(3,0,maxCovLimitText)
-        self.settingsModel.setItem(3,1,maxCovLimitData)
-        self.settingsModel.setItem(4,0,connPenWidthText)
-        self.settingsModel.setItem(4,1,connPenWidthData)
-        self.settingsModel.setItem(5,0,showChrNameText)
-        self.settingsModel.setItem(5,1,showChrNameCheck)
+        self.settingsModel.setItem(1,0,distResText)
+        self.settingsModel.setItem(1,1,distResData)
+        self.settingsModel.setItem(2,0,useCovLog)
+        self.settingsModel.setItem(2,1,useCovLogCheck)
+        self.settingsModel.setItem(3,0,minCovLimitText)
+        self.settingsModel.setItem(3,1,minCovLimitData)
+        self.settingsModel.setItem(4,0,maxCovLimitText)
+        self.settingsModel.setItem(4,1,maxCovLimitData)
+        self.settingsModel.setItem(5,0,connPenWidthText)
+        self.settingsModel.setItem(5,1,connPenWidthData)
+        self.settingsModel.setItem(6,0,showChrNameText)
+        self.settingsModel.setItem(6,1,showChrNameCheck)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
     def viewSettings(self):
@@ -139,14 +149,16 @@ class CircosView(QGraphicsView):
         if item.row() == 0:
             self.bpWindow = item.data(0)
         if item.row() == 1:
-            self.useCoverageLog = not self.useCoverageLog
+            self.bpDistanceResolution = item.data(0)
         if item.row() == 2:
-            self.minCoverage = item.data(0)/100
+            self.useCoverageLog = not self.useCoverageLog
         if item.row() == 3:
-            self.maxCoverage = item.data(0)/100
+            self.minCoverage = item.data(0)/100
         if item.row() == 4:
-            self.connWidth = item.data(0)
+            self.maxCoverage = item.data(0)/100
         if item.row() == 5:
+            self.connWidth = item.data(0)
+        if item.row() == 6:
            self.showChrNames = not self.showChrNames
 
     #Sums the end bp for every chromosome with display toggled on
@@ -588,63 +600,114 @@ class CircosView(QGraphicsView):
                             connItem1[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
                             connItem2[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
                             
-                            
+    def numDispChromosomes(self):
+        dispChromos = 0
+        
+        for chromo in self.chromosomes:
+            if chromo.display:
+                dispChromos += 1
+                
+        return dispChromos
+
+                          
     def createDistanceMarkers(self):
         size = self.size()
         totalDispBP = self.returnTotalDisplayedBP()
         outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
         inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+        bpPerDegree = (totalDispBP/(360 - self.numDispChromosomes()))/1000000
+        bpPerDegree = round(bpPerDegree,2)
+        degreePerBp = (360-self.numDispChromosomes())/(totalDispBP/(self.bpDistanceResolution*1000000))
         chrStartAngle = 0
         centerPoint = inRect.center()
         for chromo in self.chromosomes:
             if not chromo.display:
                 continue
-            chrEndAngle = (int(chromo.end) / totalDispBP) * 360 - 1
+            chrEndAngle = ((int(chromo.end) / totalDispBP) * 360 - 1)
             innerPath = QPainterPath()
             innerPath.moveTo(centerPoint)
             outerPath = QPainterPath()
             outerPath.moveTo(centerPoint)
             chromoLength = int(chromo.end)
             curAngle = chrStartAngle
-            angleIncr = 1
+            angleIncr = degreePerBp
+            angleCounter = 0
             distanceNameItemList = []
-            for angle in range(int(chrEndAngle+1)):
-                if angle%5 == 0:
+            while curAngle < (chrStartAngle + chrEndAngle):
+                if angleCounter%10 == 0:
                     inRect = QRect(QPoint(40,40),QPoint(size.height()-40,size.height()-40))
                     outRect = QRect(QPoint(60,60),QPoint(size.height()-60,size.height()-60))
-                    distanceName = str(angle)
+                    distanceName = str(int(angleCounter))
                 else:
                     outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
                     inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
                     distanceName = ""
+                textHeight = 20
+                textWidth = 13 if curAngle<10 else 18 
                 innerPath.arcMoveTo(inRect, -curAngle)
                 outerPath.arcMoveTo(outRect, -curAngle)
                 distanceNameItem = QGraphicsTextItem(distanceName)
-                #boundingItem = QGraphicsRectItem(distanceNameItem.boundingRect())
-                #boundingItem.setPos(innerPath.currentPosition())
-                offsetX = (math.sin(0.5*math.radians(curAngle) + math.pi))*distanceNameItem.boundingRect().width()
-                offsetY = (math.cos(math.radians(curAngle) - (math.pi/3)) - 1)*(distanceNameItem.boundingRect().height()/2)
-                offsetPoint = QPoint(offsetX,offsetY)
-                #print("curAngle: " + str(curAngle))
-                #print("OffsetX: " + str(offsetX))
-                #print("offsetY: " + str(offsetY))
+
+                if curAngle >= 0 and curAngle < 67:
+                    offsetX = 0
+                elif curAngle >= 67 and curAngle < 115:
+                    offsetX = -0.5
+                elif curAngle >= 115 and curAngle < 247:
+                    offsetX = -1
+                elif curAngle >= 247 and curAngle < 292:
+                    offsetX = -0.5
+                elif curAngle >= 292 and curAngle <= 360:
+                    offsetX = 0
+                    
+                offsetX = offsetX*textWidth
+                offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight               
+                offsetPoint = QPointF(offsetX,offsetY)
                 
                 distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
-                
-                
-                
-                
-                #self.scene.addItem(boudningITem)
                 distanceNameItemList.append(distanceNameItem)
+                
                 lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
                 outerPath.moveTo(lineBetween.pointAt(0))
                 outerPath.lineTo(lineBetween.pointAt(1))
                 self.scene.addPath(innerPath)
+                angleCounter += 1
                 curAngle += angleIncr
+                
             chrStartAngle += chrEndAngle + 1
+            
             distItem = QGraphicsPathItem(outerPath)
             self.distanceMarkerItems.append([distItem, distanceNameItemList])
             
+            
+        for incr in range(11):
+            if incr%10 == 0:
+                lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
+                legendNameItem = QGraphicsTextItem(str(incr))
+            else:
+                lineBetween = QLineF(outRect.width()+incr*10,outRect.height()-5, outRect.width()+incr*10, outRect.height()-15)
+                legendNameItem = QGraphicsTextItem("")
+            legendPath = QPainterPath()
+            legendPath.moveTo(lineBetween.pointAt(0))
+            legendPath.lineTo(lineBetween.pointAt(1))
+            legendNameItem.setPos(legendPath.currentPosition().x()-10,legendPath.currentPosition().y()-20)
+            legendItem = QGraphicsPathItem(legendPath)
+            self.legendItems.append([legendItem, legendNameItem])
+        #lineBetweenStart = QLineF(outRect.width(),outRect.height(), outRect.width(), outRect.height()-20)
+        #lineBetweenEnd = QLineF(outRect.width()+100,outRect.height(), outRect.width()+100, outRect.height()-20)
+        lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
+        
+        #legendNameItem = QGraphicsTextItem("")
+        legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
+        legendPath = QPainterPath()
+        #legendPath.moveTo(lineBetweenStart.pointAt(0))
+        #legendPath.lineTo(lineBetweenStart.pointAt(1))
+        #legendPath.moveTo(lineBetweenEnd.pointAt(0))
+        #legendPath.lineTo(lineBetweenEnd.pointAt(1))
+        legendPath.moveTo(lineBetween.pointAt(0))
+        legendPath.lineTo(lineBetween.pointAt(1))
+        legendTitleItem.setPos(legendPath.currentPosition().x()-75, legendPath.currentPosition().y()+20)
+        legendItem = QGraphicsPathItem(legendPath)
+        self.legendItems.append([legendItem, legendTitleItem])
 
     #Imports either a tab file with specified regions to color, or a cytoband file
     def importColorTab(self):
@@ -727,6 +790,9 @@ class CircosView(QGraphicsView):
             self.scene.removeItem(distItem[0])
             for distNameItem in distItem[1]:
                 self.scene.removeItem(distNameItem)
+        for legendItem in self.legendItems:
+            self.scene.removeItem(legendItem[0])
+            self.scene.removeItem(legendItem[1])
         for index in range(len(self.chromosomes)):
              for connItem in self.chromosomes[index].connection_list:
                   self.scene.removeItem(connItem[0])
@@ -736,6 +802,7 @@ class CircosView(QGraphicsView):
         self.chromosomeItems = []
         self.coverageItems = []
         self.distanceMarkerItems = []
+        self.legendItems = []
         for index in range(len(self.chromosomes)):
              self.chromosomes[index].connection_list = []
         self.chromosome_angle_list = [None]*24
@@ -753,6 +820,9 @@ class CircosView(QGraphicsView):
             self.scene.addItem(distItem[0])
             for distNameItem in distItem[1]:
                 self.scene.addItem(distNameItem)
+        for legendItem in self.legendItems:
+            self.scene.addItem(legendItem[0])
+            self.scene.addItem(legendItem[1])
         #For more convenient coloring, create a new graphics item consisting of all coverages added together
         completeCoveragePath = QPainterPath()
         for covItem in self.coverageItems:
