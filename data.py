@@ -214,7 +214,7 @@ class Chromosome():
         self.connection_list = []
         self.display_connections = False
         self.display_cytoBandNames = False
-        self.sorted = {'TYPE':False, 'START':False, 'END':False, 'GENE(S)':False, 'CYTOBAND':False}
+        self.sorted = {'TYPE':False, 'START':False, 'END':False, 'GENE(S)':False, 'CYTOBAND':False, 'RankScore':False}
         self.sortedN = {0:False, 1:False, 2:False, 3:False, 4:False}
         self.headIndex = {0:4, 1:1, 2:3, 3:7, 4:8}
         self.activeSortType = -1
@@ -256,6 +256,7 @@ class Chromosome():
                 self.sorted['END'] = False
                 self.sorted['GENE(S)'] = False
                 self.sorted['CYTOBAND'] = False
+                self.sorted['RankScore'] = False
             else:
                 self.variants.sort(key=lambda x: x[4], reverse=True)
                 self.sorted['TYPE'] = False
@@ -268,11 +269,10 @@ class Chromosome():
                 self.sorted['END'] = False
                 self.sorted['GENE(S)'] = False
                 self.sorted['CYTOBAND'] = False
+                self.sorted['RankScore'] = False
             else:
                 self.variants.sort(key=lambda x: x[1], reverse=True)
                 self.sorted['START'] = False
-            for variant in self.variants:
-                print(variant[1])
            
         elif headerIndex == 2:
             self.activeSortType = 2
@@ -283,6 +283,7 @@ class Chromosome():
                 self.sorted['END'] = True
                 self.sorted['GENE(S)'] = False
                 self.sorted['CYTOBAND'] = False
+                self.sorted['RankScore'] = False
             else:
                 self.variants.sort(key=lambda x: x[3], reverse=True)
                 self.sorted['END'] = False
@@ -295,6 +296,7 @@ class Chromosome():
                 self.sorted['END'] = False
                 self.sorted['GENE(S)'] = True
                 self.sorted['CYTOBAND'] = False
+                self.sorted['RankScore'] = False
             else:
                 self.variants.sort(key=lambda x: x[7], reverse=True)
                 self.sorted['GENE(S)'] = False
@@ -307,16 +309,29 @@ class Chromosome():
                 self.sorted['END'] = False
                 self.sorted['GENE(S)'] = False
                 self.sorted['CYTOBAND'] = True
+                self.sorted['RankScore'] = False
             else:
                 self.variants.sort(key=lambda x: x[8], reverse=True)
                 self.sorted['CYTOBAND'] = False 
-                
         elif headerIndex == 5:
+            if not self.sorted['RankScore']:
+                self.variants.sort(key=lambda x: x[10])
+                self.sorted['TYPE'] = False
+                self.sorted['START'] = False
+                self.sorted['END'] = False
+                self.sorted['GENE(S)'] = False
+                self.sorted['CYTOBAND'] = False
+                self.sorted['RankScore'] = True
+            else:
+                self.variants.sort(key=lambda x: x[10], reverse=True)
+                self.sorted['RankScore'] = False      
+        elif headerIndex == 6:
             self.sorted['TYPE'] = False
             self.sorted['START'] = False
             self.sorted['END'] = False
             self.sorted['GENE(S)'] = False
-            self.sorted['CYTOBAND'] = False            
+            self.sorted['CYTOBAND'] = False
+            self.sorted['RankScore'] = False
         
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
         #The variants are by default set to be shown
@@ -342,8 +357,12 @@ class Chromosome():
             cband = description["CYTOBAND"]
         else:
             cband = None
+        if "RankScore" in description:
+            rankScore = description["RankScore"]
+        else:
+            rankScore = None
         #Add the variant data to this chromosome
-        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband, display_variant]
+        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband, display_variant, rankScore]
         self.variants.append(variant)
 
     def createConnections(self):

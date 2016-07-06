@@ -258,7 +258,7 @@ class CircView(QGraphicsView):
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
         varModel = VariantItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Active']
+        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score', 'Active']
         varModel.setHorizontalHeaderLabels(topstring)
         #Adding variant info to a list
         for variant in chromo.variants:
@@ -280,6 +280,8 @@ class CircView(QGraphicsView):
             infoitem.append(QStandardItem(variant[7]))
             #this is cband in the variant
             infoitem.append(QStandardItem(variant[8]))
+            #this is rankscore in the variant
+            infoitem.append(QStandardItem(variant[10]))
             #this is a check for displaying a variant or not
             dispCheckItem = QStandardItem()
             dispCheckItem.setCheckable(False)
@@ -307,13 +309,12 @@ class CircView(QGraphicsView):
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
 
             varList.setSortingEnabled(True)
-            varList.setMinimumSize(600,400)
+            varList.setMinimumSize(700,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
             varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
-            #varList.horizontalHeader().sortIndicatorChanged.connect(self.handleSortIndicatorChanged)
             
             self.activeVariantTables[chromo.name] = varList
 
@@ -330,7 +331,7 @@ class CircView(QGraphicsView):
         selectedRows = set(selectedRows)
         for row in selectedRows:
             #sätta varModel i en lista å ta chromoIndex modellen för itemet
-            dispVarItem = self.activeVariantModels[chromoName].item(row,5)
+            dispVarItem = self.activeVariantModels[chromoName].item(row,6)
             if self.chromosomes[chromoIndex].variants[row][9]:
                 dispVarItem.setCheckState(Qt.Unchecked)
                 self.chromosomes[chromoIndex].variants[row][9] = False
@@ -883,7 +884,7 @@ class CircView(QGraphicsView):
 class VariantItemModel(QStandardItemModel):
     
     def sort(self, column, order):
-        if column == 0 or column == 1 or column == 2 or column == 3 or column == 4:
+        if column == 0 or column == 1 or column == 2 or column == 3 or column == 4 or column == 5:
             QStandardItemModel.sort(self, column, order)
 
 #Subclass of graphics path item for custom handling of mouse events
