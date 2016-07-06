@@ -257,7 +257,7 @@ class CircView(QGraphicsView):
 
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
-        varModel = QStandardItemModel()
+        varModel = VariantItemModel()
         topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Active']
         varModel.setHorizontalHeaderLabels(topstring)
         #Adding variant info to a list
@@ -312,12 +312,8 @@ class CircView(QGraphicsView):
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
-            varList.horizontalHeader
             varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
-            varList.horizontalHeader().sectionClicked.connect(lambda: self.sortVarList(varList,chromo))
-            
-            #self.sortVarList()
-            
+            #varList.horizontalHeader().sortIndicatorChanged.connect(self.handleSortIndicatorChanged)
             
             self.activeVariantTables[chromo.name] = varList
 
@@ -326,20 +322,8 @@ class CircView(QGraphicsView):
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
             
-    def sortVarList(self, varList, chromo):
-        activeSortType = chromo.activeSortType
-        if activeSortType == 5:
-            if chromo.sorted['START']:
-                order = Qt.AscendingOrder
-            else:
-                order = Qt.DescendingOrder
-            varList.sortByColumn(1, order)
         
         
-        
-        
-        
-
     def toggleVariants(self, chromoName, chromoIndex):
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
@@ -895,6 +879,12 @@ class CircView(QGraphicsView):
             self.scale(1.1,1.1)
         else:
             QGraphicsView.wheelEvent(self, event)
+#Custom class of the variant model to handle sorting on columns            
+class VariantItemModel(QStandardItemModel):
+    
+    def sort(self, column, order):
+        if column == 0 or column == 1 or column == 2 or column == 3 or column == 4:
+            QStandardItemModel.sort(self, column, order)
 
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
