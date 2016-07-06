@@ -28,7 +28,7 @@ class CircView(QGraphicsView):
         self.activeVariantTables = {}
 
         self.bpWindow = 500
-        self.bpDistanceResolution = 100
+        self.bpDistanceResolution = 10
         self.useCoverageLog = True
         self.minCoverage = 0.5
         self.maxCoverage = 1.5
@@ -267,7 +267,9 @@ class CircView(QGraphicsView):
             infoitem.append(QStandardItem(variant[4]))
             #this is posA in the variant
             startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
+            startData = QStandardItem()
+            startData.setData(variant[1],0)
+            infoitem.append(startData)
             #this is posB or chrB: posB in the variant (if interchromosomal)
             if variant[0] is not variant[2]:
                 endText = str(variant[2]) + ": " + str(variant[3])
@@ -304,18 +306,39 @@ class CircView(QGraphicsView):
             varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
 
-            varList.setMinimumSize(500,400)
+            varList.setSortingEnabled(True)
+            varList.setMinimumSize(600,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
             varList.setModel(self.activeVariantModels[chromo.name])
             varList.resizeColumnToContents(1)
-
+            varList.horizontalHeader
+            varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
+            varList.horizontalHeader().sectionClicked.connect(lambda: self.sortVarList(varList,chromo))
+            
+            #self.sortVarList()
+            
+            
             self.activeVariantTables[chromo.name] = varList
 
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
+            
+    def sortVarList(self, varList, chromo):
+        activeSortType = chromo.activeSortType
+        if activeSortType == 5:
+            if chromo.sorted['START']:
+                order = Qt.AscendingOrder
+            else:
+                order = Qt.DescendingOrder
+            varList.sortByColumn(1, order)
+        
+        
+        
+        
+        
 
     def toggleVariants(self, chromoName, chromoIndex):
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
@@ -614,101 +637,97 @@ class CircView(QGraphicsView):
     def createDistanceMarkers(self):
         size = self.size()
         totalDispBP = self.returnTotalDisplayedBP()
-        outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
-        inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
-        bpPerDegree = (totalDispBP/(360 - self.numDispChromosomes()))/1000000
-        bpPerDegree = round(bpPerDegree,2)
-        degreePerBp = (360-self.numDispChromosomes())/(totalDispBP/(self.bpDistanceResolution*1000000))
-        chrStartAngle = 0
-        centerPoint = inRect.center()
-        for chromo in self.chromosomes:
-            if not chromo.display:
-                continue
-            chrEndAngle = ((int(chromo.end) / totalDispBP) * 360 - 1)
-            innerPath = QPainterPath()
-            innerPath.moveTo(centerPoint)
-            outerPath = QPainterPath()
-            outerPath.moveTo(centerPoint)
-            chromoLength = int(chromo.end)
-            curAngle = chrStartAngle
-            angleIncr = degreePerBp
-            angleCounter = 0
-            distanceNameItemList = []
-            while curAngle < (chrStartAngle + chrEndAngle):
-                if angleCounter%10 == 0:
-                    inRect = QRect(QPoint(40,40),QPoint(size.height()-40,size.height()-40))
-                    outRect = QRect(QPoint(60,60),QPoint(size.height()-60,size.height()-60))
-                    distanceName = str(int(angleCounter))
+        if totalDispBP > 0:
+        
+            outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
+            inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+            bpPerDegree = (totalDispBP/(360 - self.numDispChromosomes()))/1000000
+            bpPerDegree = round(bpPerDegree,2)
+            degreePerBp = (360-self.numDispChromosomes())/(totalDispBP/(self.bpDistanceResolution*1000000))
+            chrStartAngle = 0
+            centerPoint = inRect.center()
+            for chromo in self.chromosomes:
+                if not chromo.display:
+                    continue
+                chrEndAngle = ((int(chromo.end) / totalDispBP) * 360 - 1)
+                innerPath = QPainterPath()
+                innerPath.moveTo(centerPoint)
+                outerPath = QPainterPath()
+                outerPath.moveTo(centerPoint)
+                chromoLength = int(chromo.end)
+                curAngle = chrStartAngle
+                angleIncr = degreePerBp
+                angleCounter = 0
+                distanceNameItemList = []
+                while curAngle < (chrStartAngle + chrEndAngle):
+                    if angleCounter%10 == 0:
+                        inRect = QRect(QPoint(40,40),QPoint(size.height()-40,size.height()-40))
+                        outRect = QRect(QPoint(60,60),QPoint(size.height()-60,size.height()-60))
+                        distanceName = str(int(angleCounter))
+                    else:
+                        outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
+                        inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+                        distanceName = ""
+                    textHeight = 20
+                    textWidth = 13 if curAngle<10 else 18
+                    innerPath.arcMoveTo(inRect, -curAngle)
+                    outerPath.arcMoveTo(outRect, -curAngle)
+                    distanceNameItem = QGraphicsTextItem(distanceName)
+
+                    if curAngle >= 0 and curAngle < 67:
+                        offsetX = 0
+                    elif curAngle >= 67 and curAngle < 115:
+                        offsetX = -0.5
+                    elif curAngle >= 115 and curAngle < 247:
+                        offsetX = -1
+                    elif curAngle >= 247 and curAngle < 292:
+                        offsetX = -0.5
+                    elif curAngle >= 292 and curAngle <= 360:
+                        offsetX = 0
+
+                    offsetX = offsetX*textWidth
+                    offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight
+                    offsetPoint = QPointF(offsetX,offsetY)
+
+                    distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
+                    distanceNameItemList.append(distanceNameItem)
+
+                    lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
+                    outerPath.moveTo(lineBetween.pointAt(0))
+                    outerPath.lineTo(lineBetween.pointAt(1))
+                    self.scene.addPath(innerPath)
+                    angleCounter += 1
+                    curAngle += angleIncr
+
+                chrStartAngle += chrEndAngle + 1
+
+                distItem = QGraphicsPathItem(outerPath)
+                self.distanceMarkerItems.append([distItem, distanceNameItemList])
+
+
+            for incr in range(11):
+                if incr%10 == 0:
+                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
+                    legendNameItem = QGraphicsTextItem(str(incr))
                 else:
-                    outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
-                    inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
-                    distanceName = ""
-                textHeight = 20
-                textWidth = 13 if curAngle<10 else 18
-                innerPath.arcMoveTo(inRect, -curAngle)
-                outerPath.arcMoveTo(outRect, -curAngle)
-                distanceNameItem = QGraphicsTextItem(distanceName)
+                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height()-5, outRect.width()+incr*10, outRect.height()-15)
+                    legendNameItem = QGraphicsTextItem("")
+                legendPath = QPainterPath()
+                legendPath.moveTo(lineBetween.pointAt(0))
+                legendPath.lineTo(lineBetween.pointAt(1))
+                legendNameItem.setPos(legendPath.currentPosition().x()-10,legendPath.currentPosition().y()-20)
+                legendItem = QGraphicsPathItem(legendPath)
+                self.legendItems.append([legendItem, legendNameItem])
 
-                if curAngle >= 0 and curAngle < 67:
-                    offsetX = 0
-                elif curAngle >= 67 and curAngle < 115:
-                    offsetX = -0.5
-                elif curAngle >= 115 and curAngle < 247:
-                    offsetX = -1
-                elif curAngle >= 247 and curAngle < 292:
-                    offsetX = -0.5
-                elif curAngle >= 292 and curAngle <= 360:
-                    offsetX = 0
+            lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
 
-                offsetX = offsetX*textWidth
-                offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight
-                offsetPoint = QPointF(offsetX,offsetY)
-
-                distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
-                distanceNameItemList.append(distanceNameItem)
-
-                lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
-                outerPath.moveTo(lineBetween.pointAt(0))
-                outerPath.lineTo(lineBetween.pointAt(1))
-                self.scene.addPath(innerPath)
-                angleCounter += 1
-                curAngle += angleIncr
-
-            chrStartAngle += chrEndAngle + 1
-
-            distItem = QGraphicsPathItem(outerPath)
-            self.distanceMarkerItems.append([distItem, distanceNameItemList])
-
-
-        for incr in range(11):
-            if incr%10 == 0:
-                lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
-                legendNameItem = QGraphicsTextItem(str(incr))
-            else:
-                lineBetween = QLineF(outRect.width()+incr*10,outRect.height()-5, outRect.width()+incr*10, outRect.height()-15)
-                legendNameItem = QGraphicsTextItem("")
+            legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
             legendPath = QPainterPath()
             legendPath.moveTo(lineBetween.pointAt(0))
             legendPath.lineTo(lineBetween.pointAt(1))
-            legendNameItem.setPos(legendPath.currentPosition().x()-10,legendPath.currentPosition().y()-20)
+            legendTitleItem.setPos(legendPath.currentPosition().x()-75, legendPath.currentPosition().y()+20)
             legendItem = QGraphicsPathItem(legendPath)
-            self.legendItems.append([legendItem, legendNameItem])
-        #lineBetweenStart = QLineF(outRect.width(),outRect.height(), outRect.width(), outRect.height()-20)
-        #lineBetweenEnd = QLineF(outRect.width()+100,outRect.height(), outRect.width()+100, outRect.height()-20)
-        lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
-
-        #legendNameItem = QGraphicsTextItem("")
-        legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
-        legendPath = QPainterPath()
-        #legendPath.moveTo(lineBetweenStart.pointAt(0))
-        #legendPath.lineTo(lineBetweenStart.pointAt(1))
-        #legendPath.moveTo(lineBetweenEnd.pointAt(0))
-        #legendPath.lineTo(lineBetweenEnd.pointAt(1))
-        legendPath.moveTo(lineBetween.pointAt(0))
-        legendPath.lineTo(lineBetween.pointAt(1))
-        legendTitleItem.setPos(legendPath.currentPosition().x()-75, legendPath.currentPosition().y()+20)
-        legendItem = QGraphicsPathItem(legendPath)
-        self.legendItems.append([legendItem, legendTitleItem])
+            self.legendItems.append([legendItem, legendTitleItem])
 
     #Imports either a tab file with specified regions to color, or a cytoband file
     def importColorTab(self):
