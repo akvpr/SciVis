@@ -442,10 +442,11 @@ class CircView(QGraphicsView):
         self.initscene()
 
     def toggleCoverage(self):
-        if self.completeCoveragePathItem.isVisible():
-            self.completeCoveragePathItem.hide()
-        else:
-            self.completeCoveragePathItem.show()
+        for covItem in self.coverageItems:
+            if covItem.isVisible():
+                covItem.hide()
+            else:
+                covItem.show()
 
     def defineRectangles(self):
         size = self.size()
@@ -470,15 +471,12 @@ class CircView(QGraphicsView):
             inner = QPainterPath()
             outer.moveTo(self.outerChrRect.center())
             outer.arcTo(self.outerChrRect,-curAngle, -angleIncr+1)
-            #outer.closeSubpath()
             inner.moveTo(self.innerChrRect.center())
             inner.arcTo(self.innerChrRect,-curAngle, -angleIncr+1)
-            #inner.closeSubpath()
             #Removes any leftover painting path that may cause ugly lines in the middle
             leftoverArea = QPainterPath()
             leftoverArea.moveTo(self.innerChrRect.center())
             leftoverArea.arcTo(self.innerChrRect,0,360)
-            #leftoverArea.closeSubpath()
             #Remove the inner circle sector from the outer sector to get the area to display
             chromoPath = outer.subtracted(inner)
             chromoPath = chromoPath.subtracted(leftoverArea)
@@ -509,7 +507,7 @@ class CircView(QGraphicsView):
             backgroundPathItem = QGraphicsPathItem(backgroundPath)
             backgroundPathItem.setBrush(Qt.lightGray)
             backgroundPathItem.setOpacity(0.5)
-            self.backgroundPathItems.append(backgroundPathItem)
+            self.coverageItems.append(backgroundPathItem)
             #Saving the angles for later use, see drawConnections
             angles = [curAngle, angleIncr]
             self.chromosome_angle_list[chromo.name] = angles
@@ -524,6 +522,7 @@ class CircView(QGraphicsView):
         else:
             normValue = self.coverageNorm
         centerPoint = self.innerCoverageRect.center()
+        coveragePaths = []
         for chromo in self.chromosomes:
             if not chromo.display:
                 continue
@@ -556,8 +555,13 @@ class CircView(QGraphicsView):
                 outerPath.lineTo(lineBetween.pointAt(tVal))
                 curAngle += angleIncr
             chrStartAngle += chrEndAngle + 1
-            covItem = QGraphicsPathItem(outerPath)
-            self.coverageItems.append(covItem)
+            coveragePaths.append(outerPath)
+        #For more convenient coloring, create a new graphics item consisting of all coverages added together
+        completeCoveragePath = QPainterPath()
+        for path in coveragePaths:
+            completeCoveragePath.addPath(path)
+        self.completeCoveragePathItem = QGraphicsPathItem(completeCoveragePath)
+        self.coverageItems.append(self.completeCoveragePathItem)
 
     def drawConnections(self):
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
@@ -798,16 +802,17 @@ class CircView(QGraphicsView):
 
     def initscene(self):
         self.defineRectangles()
-        #Clear old chromosome items, coverage, connections
-        try:
-            self.scene.removeItem(self.completeCoveragePathItem)
-        except:
-            pass
+        #Clear old items
         for chrItem in self.chromosomeItems:
             #Update the color dict in case user modified these
             self.chromoColors[chrItem.nameString] = chrItem.brush().color()
             try:
                 self.scene.removeItem(chrItem)
+            except:
+                pass
+        for covItem in self.coverageItems:
+            try:
+                self.scene.removeItem(covItem)
             except:
                 pass
         for distItem in self.distanceMarkerItems:
@@ -867,13 +872,6 @@ class CircView(QGraphicsView):
         for legendItem in self.legendItems:
             self.scene.addItem(legendItem[0])
             self.scene.addItem(legendItem[1])
-        for backgroundItem in self.backgroundPathItems:
-            self.scene.addItem(backgroundItem)
-        #For more convenient coloring, create a new graphics item consisting of all coverages added together
-        completeCoveragePath = QPainterPath()
-        for covItem in self.coverageItems:
-            completeCoveragePath.addPath(covItem.path())
-        self.completeCoveragePathItem = QGraphicsPathItem(completeCoveragePath)
         #We then create a gradient with short interpolation distances, based on
         #the rectangles used for defining coverage items
         gradRadius = self.outerCoverageRect.width()/2
@@ -890,7 +888,8 @@ class CircView(QGraphicsView):
         covPen = QPen()
         covPen.setBrush(covBrush)
         self.completeCoveragePathItem.setPen(covPen)
-        self.scene.addItem(self.completeCoveragePathItem)
+        for covItem in self.coverageItems:
+            self.scene.addItem(covItem)
         self.update()
 
     #Adds the VCF and TAB file names as text items to the top of the scene

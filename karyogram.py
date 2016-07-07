@@ -305,6 +305,9 @@ class KaryogramView(QGraphicsView):
                 cbandA = connection[4].split(',')[0]
                 cbandB = connection[4].split(',')[1]
                 #The x-positions are accessed, the chromosome A x-pos has the chromosome width added to it. This will make the connection start on its right side
+                #First check if these cytobands exist, in case of discrepancy in vcf and cytoband files
+                if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
+                    continue
                 xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
                 xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
