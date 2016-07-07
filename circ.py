@@ -582,10 +582,17 @@ class CircView(QGraphicsView):
                 curAngle_A = self.chromosome_angle_list[chrA.name][0]
                 curAngle_B = self.chromosome_angle_list[chrB.name][0]
                 #The windows of each variant (WINA, WINB) are used to determine where on the chromosome the interaction is located
-                bp_End_A = int(connection[2].split(',')[1])
-                chrA_length = int(chrA.end)
-                bp_End_B = int(connection[3].split(',')[1])
-                chrB_length = int(chrB.end)
+                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
+                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                    bp_End_A = int(connection[3].split(',')[1])
+                    chrA_length = int(chrA.end)
+                    bp_End_B = int(connection[2].split(',')[1])
+                    chrB_length = int(chrB.end)
+                else:
+                    bp_End_A = int(connection[2].split(',')[1])
+                    chrA_length = int(chrA.end)
+                    bp_End_B = int(connection[3].split(',')[1])
+                    chrB_length = int(chrB.end)
                 #A percentage of the total angle (used to draw the chromosome in makeItems) determines where on the
                 #chromosome the connection is located
                 angleIncr_A = (1-((chrA_length - bp_End_A) / chrA_length)) * (self.chromosome_angle_list[chrA.name][1]-2)
