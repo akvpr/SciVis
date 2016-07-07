@@ -268,7 +268,7 @@ class Chromosome():
                 self.sorted['CYTOBAND'] = True
             else:
                 self.variants.sort(key=lambda x: x[8], reverse=True)
-                self.sorted['CYTOBAND'] = False 
+                self.sorted['CYTOBAND'] = False
         elif headerIndex == 5:
             self.activeSortType = 5
             if not self.sorted['START']:
@@ -276,8 +276,8 @@ class Chromosome():
                 self.sorted['START'] = True
             else:
                 self.variants.sort(key=lambda x: x[1], reverse=True)
-                self.sorted['START'] = False 
-        
+                self.sorted['START'] = False
+
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
         #The variants are by default set to be shown
         display_variant = True
@@ -319,7 +319,7 @@ class Chromosome():
                 else:
                     cband = None
                 if variant[0] is not variant[2]:
-                    connection = [description["CHRA"],description["CHRB"],description["WINA"],description["WINB"],cband]
+                    connection = [variant[0],variant[2],description["WINA"],description["WINB"],cband]
                     self.connections.append(connection)
                 else:
                     connection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), cband]

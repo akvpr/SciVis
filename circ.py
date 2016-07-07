@@ -24,6 +24,7 @@ class CircView(QGraphicsView):
         self.chromosome_connection_list = []
         self.regionItems = []
         self.legendItems = []
+        self.backgroundPathItems = []
         self.activeVariantModels = {}
         self.activeVariantTables = {}
 
@@ -315,17 +316,14 @@ class CircView(QGraphicsView):
             varList.horizontalHeader
             varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
             varList.horizontalHeader().sectionClicked.connect(lambda: self.sortVarList(varList,chromo))
-            
-            #self.sortVarList()
-            
-            
+
             self.activeVariantTables[chromo.name] = varList
 
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
-            
+
     def sortVarList(self, varList, chromo):
         activeSortType = chromo.activeSortType
         if activeSortType == 5:
@@ -334,11 +332,6 @@ class CircView(QGraphicsView):
             else:
                 order = Qt.DescendingOrder
             varList.sortByColumn(1, order)
-        
-        
-        
-        
-        
 
     def toggleVariants(self, chromoName, chromoIndex):
         selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
@@ -409,8 +402,8 @@ class CircView(QGraphicsView):
                 chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
 
     def addImage(self):
-        size = self.size()
-        outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
+        self.defineRectangles()
+        outerChrRect = self.outerChrRect
         fileName = QFileDialog.getOpenFileName(None,"Specify Image file",QDir.currentPath(),
         "PNG files (*.png *.jpg *.bmp)")
         pixmap = QPixmap(fileName[0])
@@ -463,14 +456,18 @@ class CircView(QGraphicsView):
         else:
             self.completeCoveragePathItem.show()
 
+    def defineRectangles(self):
+        size = self.size()
+        self.outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
+        self.innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
+        self.outerCoverageRect = QRect(QPoint(125,125),QPoint(size.height()-125,size.height()-125))
+        self.innerCoverageRect = QRect(QPoint(180,180),QPoint(size.height()-180,size.height()-180))
+
     #Method for defining or reinitializing the chromosome items.
     def makeItems(self):
         #To determine the length (therefore angle below) of a chromosome, let 360 deg represent
         #total number of bp to be displayed. The angle to increment for each chromosome
         #is then (chromosome.end / totalDispBP)*360. Cut off 1 deg for separation.
-        size = self.size()
-        outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
-        innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
         curAngle = 0
         totalDispBP = self.returnTotalDisplayedBP()
         for chromo in self.chromosomes:
@@ -480,18 +477,17 @@ class CircView(QGraphicsView):
             #Define two painter paths constructing circle sectors
             outer = QPainterPath()
             inner = QPainterPath()
-            outer.moveTo(outerChrRect.center())
-            outer.arcTo(outerChrRect,-curAngle, -angleIncr+1)
-            inner.moveTo(innerChrRect.center())
-            inner.arcTo(innerChrRect,-curAngle, -angleIncr+1)
-            #Saving the angles for later use, see drawConnections
-            angles = [curAngle, angleIncr]
-            self.chromosome_angle_list[chromo.name] = angles
-            curAngle += angleIncr
+            outer.moveTo(self.outerChrRect.center())
+            outer.arcTo(self.outerChrRect,-curAngle, -angleIncr+1)
+            #outer.closeSubpath()
+            inner.moveTo(self.innerChrRect.center())
+            inner.arcTo(self.innerChrRect,-curAngle, -angleIncr+1)
+            #inner.closeSubpath()
             #Removes any leftover painting path that may cause ugly lines in the middle
             leftoverArea = QPainterPath()
-            leftoverArea.moveTo(innerChrRect.center())
-            leftoverArea.arcTo(innerChrRect,0,360)
+            leftoverArea.moveTo(self.innerChrRect.center())
+            leftoverArea.arcTo(self.innerChrRect,0,360)
+            #leftoverArea.closeSubpath()
             #Remove the inner circle sector from the outer sector to get the area to display
             chromoPath = outer.subtracted(inner)
             chromoPath = chromoPath.subtracted(leftoverArea)
@@ -507,19 +503,36 @@ class CircView(QGraphicsView):
             chromoItem.setBrush(currentColor)
             #Add the finished graphics item to a list
             self.chromosomeItems.append(chromoItem)
+            #Background for coverage area
+            leftoverArea = QPainterPath()
+            leftoverArea.moveTo(self.innerCoverageRect.center())
+            leftoverArea.arcTo(self.innerCoverageRect,0,360)
+            outerBackgroundPath = QPainterPath()
+            innerBackgroundPath = QPainterPath()
+            outerBackgroundPath.moveTo(self.outerCoverageRect.center())
+            outerBackgroundPath.arcTo(self.outerCoverageRect,-curAngle, -angleIncr+1)
+            innerBackgroundPath.moveTo(self.innerCoverageRect.center())
+            innerBackgroundPath.arcTo(self.innerCoverageRect,-curAngle, -angleIncr+1)
+            backgroundPath = outerBackgroundPath.subtracted(innerBackgroundPath)
+            backgroundPath = backgroundPath.subtracted(leftoverArea)
+            backgroundPathItem = QGraphicsPathItem(backgroundPath)
+            backgroundPathItem.setBrush(Qt.lightGray)
+            backgroundPathItem.setOpacity(0.5)
+            self.backgroundPathItems.append(backgroundPathItem)
+            #Saving the angles for later use, see drawConnections
+            angles = [curAngle, angleIncr]
+            self.chromosome_angle_list[chromo.name] = angles
+            curAngle += angleIncr
 
-    #Creates a coverage graph. FIX: maybe add bp delineation?
+    #Creates a coverage graph.
     def createCoverage(self):
-        size = self.size()
         totalDispBP = self.returnTotalDisplayedBP()
-        inRect = QRect(QPoint(150,150),QPoint(size.height()-150,size.height()-150))
-        outRect = QRect(QPoint(125,125),QPoint(size.height()-125,size.height()-125))
         chrStartAngle = 0
         if self.useCoverageLog:
             normValue = self.coverageNormLog
         else:
             normValue = self.coverageNorm
-        centerPoint = inRect.center()
+        centerPoint = self.innerCoverageRect.center()
         for chromo in self.chromosomes:
             if not chromo.display:
                 continue
@@ -545,8 +558,8 @@ class CircView(QGraphicsView):
                 if (avgCoverage < normValue*self.minCoverage):
                     avgCoverage = normValue*self.minCoverage
                 tVal = (avgCoverage - normValue*self.minCoverage)/(normValue*self.maxCoverage - normValue*self.minCoverage)
-                innerPath.arcMoveTo(inRect,-curAngle)
-                outerPath.arcMoveTo(outRect,-curAngle)
+                innerPath.arcMoveTo(self.innerCoverageRect,-curAngle)
+                outerPath.arcMoveTo(self.outerCoverageRect,-curAngle)
                 lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
                 outerPath.moveTo(lineBetween.pointAt(0.5))
                 outerPath.lineTo(lineBetween.pointAt(tVal))
@@ -557,9 +570,6 @@ class CircView(QGraphicsView):
 
     def drawConnections(self):
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
-        size = self.size()
-        outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
-        innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
         counter = 0
         for chrA in self.chromosomeDict.values():
             if not (chrA.display_connections and chrA.display):
@@ -588,11 +598,11 @@ class CircView(QGraphicsView):
                 #A Path is created to assign the position for the connections
                 tempPath = QPainterPath()
                 #The arMoveTo() function is used to get the different points on each chromosome the connection is located
-                tempPath.arcMoveTo(innerChrRect, - (curAngle_A + angleIncr_A))
+                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_A + angleIncr_A))
                 posA = tempPath.currentPosition()
-                tempPath.arcMoveTo(innerChrRect, - (curAngle_B + angleIncr_B))
+                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_B + angleIncr_B))
                 posB = tempPath.currentPosition()
-                centerPos = outerChrRect.center()
+                centerPos = self.outerChrRect.center()
                 #A Bezier curve is then created between these three points
                 connectionPath = QPainterPath()
                 connectionPath.moveTo(posA)
@@ -602,6 +612,7 @@ class CircView(QGraphicsView):
                 #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
                 pen = QPen(self.chromoColors[chrB.name], self.connWidth)
                 connectionItem.setPen(pen)
+                connectionItem.setZValue(1)
                 #Creating a rectangle (1x1 pixels) around each posB point for use when heat mapping the connections
                 rect = QRect(posB.toPoint(),QSize(1,1))
                 rect.moveCenter(posB.toPoint())
@@ -635,12 +646,11 @@ class CircView(QGraphicsView):
         return dispChromos
 
     def createDistanceMarkers(self):
-        size = self.size()
         totalDispBP = self.returnTotalDisplayedBP()
         if totalDispBP > 0:
-        
-            outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
-            inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+            adjustPoint = QPoint(3,3)
+            inRect = QRect(self.outerChrRect.topLeft()-adjustPoint, self.outerChrRect.bottomRight()+adjustPoint)
+            outRect = QRect(self.outerChrRect.topLeft()+adjustPoint, self.outerChrRect.bottomRight()-adjustPoint)
             bpPerDegree = (totalDispBP/(360 - self.numDispChromosomes()))/1000000
             bpPerDegree = round(bpPerDegree,2)
             degreePerBp = (360-self.numDispChromosomes())/(totalDispBP/(self.bpDistanceResolution*1000000))
@@ -661,12 +671,14 @@ class CircView(QGraphicsView):
                 distanceNameItemList = []
                 while curAngle < (chrStartAngle + chrEndAngle):
                     if angleCounter%10 == 0:
-                        inRect = QRect(QPoint(40,40),QPoint(size.height()-40,size.height()-40))
-                        outRect = QRect(QPoint(60,60),QPoint(size.height()-60,size.height()-60))
+                        adjustPoint = QPoint(10,10)
+                        inRect = QRect(self.outerChrRect.topLeft()-adjustPoint, self.outerChrRect.bottomRight()+adjustPoint)
+                        outRect = QRect(self.outerChrRect.topLeft()+adjustPoint, self.outerChrRect.bottomRight()-adjustPoint)
                         distanceName = str(int(angleCounter))
                     else:
-                        outRect = QRect(QPoint(53,53),QPoint(size.height()-53,size.height()-53))
-                        inRect = QRect(QPoint(47,47),QPoint(size.height()-47,size.height()-47))
+                        adjustPoint = QPoint(3,3)
+                        inRect = QRect(self.outerChrRect.topLeft()-adjustPoint, self.outerChrRect.bottomRight()+adjustPoint)
+                        outRect = QRect(self.outerChrRect.topLeft()+adjustPoint, self.outerChrRect.bottomRight()-adjustPoint)
                         distanceName = ""
                     textHeight = 20
                     textWidth = 13 if curAngle<10 else 18
@@ -743,9 +755,7 @@ class CircView(QGraphicsView):
             self.colorRegions(colorTab,True)
 
     def colorRegions(self,colorTab,cytoband):
-        size = self.size()
-        outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
-        innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
+        self.defineRectangles()
         colors = {'red': Qt.red, 'magenta': Qt.magenta, 'blue': Qt.blue, 'cyan': Qt.cyan, 'yellow': Qt.yellow, 'darkBlue': Qt.darkBlue}
         stainColors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
         'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
@@ -759,9 +769,8 @@ class CircView(QGraphicsView):
                     continue
                 if chromo.name == region[0]:
                     #where on the circle does this chromosome start, how much does it span?
-                    index = self.chromosomes.index(chromo)
-                    startAngle = self.chromosome_angle_list[index][0]
-                    angleSpan = self.chromosome_angle_list[index][1]
+                    startAngle = self.chromosome_angle_list[chromo.name][0]
+                    angleSpan = self.chromosome_angle_list[chromo.name][1]
                     #the region starts and ends at certain points in this span
                     regionStart = int(region[1])
                     regionEnd = int(region[2])
@@ -773,14 +782,14 @@ class CircView(QGraphicsView):
                     #Define two painter paths constructing circle sectors
                     outer = QPainterPath()
                     inner = QPainterPath()
-                    outer.moveTo(outerChrRect.center())
-                    outer.arcTo(outerChrRect,-regionStartAngle, -(regionEndAngle-regionStartAngle))
-                    inner.moveTo(innerChrRect.center())
-                    inner.arcTo(innerChrRect,-regionStartAngle, -(regionEndAngle-regionStartAngle))
+                    outer.moveTo(self.outerChrRect.center())
+                    outer.arcTo(self.outerChrRect,-regionStartAngle, -(regionEndAngle-regionStartAngle))
+                    inner.moveTo(self.innerChrRect.center())
+                    inner.arcTo(self.innerChrRect,-regionStartAngle, -(regionEndAngle-regionStartAngle))
                     #Removes any leftover painting path that may cause ugly lines in the middle
                     leftoverArea = QPainterPath()
-                    leftoverArea.moveTo(innerChrRect.center())
-                    leftoverArea.arcTo(innerChrRect,0,360)
+                    leftoverArea.moveTo(self.innerChrRect.center())
+                    leftoverArea.arcTo(self.innerChrRect,0,360)
                     #Remove the inner circle sector from the outer sector to get the area to display
                     regionPath = outer.subtracted(inner)
                     regionPath = regionPath.subtracted(leftoverArea)
@@ -797,6 +806,7 @@ class CircView(QGraphicsView):
             self.scene.addItem(regionItem)
 
     def initscene(self):
+        self.defineRectangles()
         #Clear old chromosome items, coverage, connections
         try:
             self.scene.removeItem(self.completeCoveragePathItem)
@@ -805,17 +815,28 @@ class CircView(QGraphicsView):
         for chrItem in self.chromosomeItems:
             #Update the color dict in case user modified these
             self.chromoColors[chrItem.nameString] = chrItem.brush().color()
-            self.scene.removeItem(chrItem)
+            try:
+                self.scene.removeItem(chrItem)
+            except:
+                pass
         for distItem in self.distanceMarkerItems:
-            self.scene.removeItem(distItem[0])
+            try:
+                self.scene.removeItem(distItem[0])
+            except:
+                pass
             for distNameItem in distItem[1]:
-                self.scene.removeItem(distNameItem)
+                try:
+                    self.scene.removeItem(distNameItem)
+                except:
+                    pass
         for legendItem in self.legendItems:
-            self.scene.removeItem(legendItem[0])
-            self.scene.removeItem(legendItem[1])
-
-        for index in range(len(self.chromosomes)):
-             for connItem in self.chromosomes[index].connection_list:
+            try:
+                self.scene.removeItem(legendItem[0])
+                self.scene.removeItem(legendItem[1])
+            except:
+                pass
+        for chromo in self.chromosomes:
+             for connItem in chromo.connection_list:
                  try:
                      self.scene.removeItem(connItem[0])
                  except:
@@ -825,11 +846,17 @@ class CircView(QGraphicsView):
                 self.scene.removeItem(regionItem)
             except:
                 pass
+        for backgroundItem in self.backgroundPathItems:
+            try:
+                self.scene.removeItem(backgroundItem)
+            except:
+                pass
         self.scene.markedChromItems = []
         self.chromosomeItems = []
         self.coverageItems = []
         self.distanceMarkerItems = []
         self.legendItems = []
+        self.backgroundPathItems = []
         for index in range(len(self.chromosomes)):
              self.chromosomes[index].connection_list = []
         #Create new graphics items, add these to the scene.
@@ -849,6 +876,8 @@ class CircView(QGraphicsView):
         for legendItem in self.legendItems:
             self.scene.addItem(legendItem[0])
             self.scene.addItem(legendItem[1])
+        for backgroundItem in self.backgroundPathItems:
+            self.scene.addItem(backgroundItem)
         #For more convenient coloring, create a new graphics item consisting of all coverages added together
         completeCoveragePath = QPainterPath()
         for covItem in self.coverageItems:
@@ -856,20 +885,15 @@ class CircView(QGraphicsView):
         self.completeCoveragePathItem = QGraphicsPathItem(completeCoveragePath)
         #We then create a gradient with short interpolation distances, based on
         #the rectangles used for defining coverage items
-        size = self.size()
-        outRect = QRect(QPoint(125,125),QPoint(size.height()-125,size.height()-125))
-        inRect = QRect(QPoint(150,150),QPoint(size.height()-150,size.height()-150))
-        gradRadius = outRect.width()/2
-        radialGrad = QRadialGradient(outRect.center(), gradRadius)
-        diff = outRect.width()/2 - inRect.width()/2
+        gradRadius = self.outerCoverageRect.width()/2
+        radialGrad = QRadialGradient(self.outerCoverageRect.center(), gradRadius)
+        diff = self.outerCoverageRect.width()/2 - self.innerCoverageRect.width()/2
         #In setColorAt, 0 is the circle center, 1 is the edge.
         #The coverage graph reaches from a radius of 1, to 1-diff/gradRadius, in these coordinates.
-        #We use two stops for a color switch, placed around thirds of coverage graph reach.
-        radialGrad.setColorAt(1,Qt.red)
-        radialGrad.setColorAt(1-diff/gradRadius*(1/3.1),Qt.red)
-        radialGrad.setColorAt(1-diff/gradRadius*(1/3),Qt.black)
-        radialGrad.setColorAt(1-diff/gradRadius*(2/3),Qt.black)
-        radialGrad.setColorAt(1-diff/gradRadius*(2.1/3),Qt.blue)
+        #We use stops for a color switch, placed in the middle of coverage graph reach.
+        radialGrad.setColorAt(1,Qt.green)
+        radialGrad.setColorAt(1-diff/gradRadius*(1/2),Qt.green)
+        radialGrad.setColorAt(1-diff/gradRadius*(1/1.99),Qt.red)
         #Create a pen with a brush using the gradient, tell the graphic item to use the pen, add to scene.
         covBrush = QBrush(radialGrad)
         covPen = QPen()

@@ -434,8 +434,8 @@ class KaryogramView(QGraphicsView):
                         bandItems.append(bandRectItem)
                         if chromo.display_cytoBandNames:
                             bandNameItem = QGraphicsTextItem(cyto[3])
-                            nameXPosition = bandRectItem.rect().left()-bandRectItem.boundingRect().width() if placeLeft else bandRectItem.rect().right()
-                            bandNameItem.setPos(nameXPosition,bandRectItem.rect().center().y()-12)
+                            nameXPosition = bandRectItem.boundingRect().left()-bandRectItem.boundingRect().width() if placeLeft else bandRectItem.boundingRect().right()
+                            bandNameItem.setPos(nameXPosition,bandRectItem.boundingRect().center().y()-12)
                             bandNameItem.setScale(self.chromoWidth/35)
                             self.scene.addItem(bandNameItem)
                             nameRectItem = QGraphicsRectItem
