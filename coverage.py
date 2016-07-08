@@ -359,27 +359,56 @@ class ChromoPlotWindow(QWidget):
         #Maps colors to coverage values as follows: red: [0,0.75], blue: [0.75,1.25], green: [1.25,5]
         colorMap = ListedColormap(['r', 'black', 'g'])
         colorNorm = BoundaryNorm([1, 1.75, 2.25, 10], 3)
+        
+        #create new data by adding the mean between two data points to a new list - doing this 3 times
+        self.newData = []
+        self.newDataTemp = []
+        self.newDataMean = []
+        
+        for index in range(len(self.coverageData)):   
+            if index < len(self.coverageData)-1:
+                self.newData.append(self.coverageData[index])
+                self.newData.append((self.coverageData[index] + self.coverageData[index+1])/2)
+            else:
+                self.newData.append(self.coverageData[index])
+        
+        for index in range(len(self.newData)):   
+            if index < len(self.newData)-1:
+                self.newDataTemp.append(self.newData[index])
+                self.newDataTemp.append((self.newData[index] + self.newData[index+1])/2)
+            else:
+                self.newDataTemp.append(self.newData[index])   
+        
+        for index in range(len(self.newDataTemp)):   
+            if index < len(self.newDataTemp)-1:
+                self.newDataMean.append(self.newDataTemp[index])
+                self.newDataMean.append((self.newDataTemp[index] + self.newDataTemp[index+1])/2)
+            else:
+                self.newDataMean.append(self.newDataTemp[index])  
+                
         #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-        points = np.array([range(len(self.coverageData)), self.coverageData]).T.reshape(-1, 1, 2)
+        points = np.array([range(len(self.newDataMean)), self.newDataMean]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
+        
         #converting the coverageData list into a numpy array needed for the LineCollection
-        numpyArrayCData = np.array(self.coverageData)
+        numpyArrayCData = np.array(self.newDataMean)
         lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
         lc.set_array(numpyArrayCData)
+
         if plotType == 0:
             self.ax.add_collection(lc)
         elif plotType == 1:
             self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm)
 
         #Create an input validator for the manual x range input boxes, range is no of bins
-        self.xRangeValidator = QIntValidator(0,len(self.coverageData),self)
+        self.xRangeValidator = QIntValidator(0,len(self.newDataMean),self)
         self.minXSet.setValidator(self.xRangeValidator)
         self.maxXSet.setValidator(self.xRangeValidator)
         self.minXSet.setText("0")
-        self.maxXSet.setText(str(len(self.coverageData)))
+        self.maxXSet.setText(str(len(self.newDataMean)))
         self.minXSet.returnPressed.connect(self.updateXRange)
         self.maxXSet.returnPressed.connect(self.updateXRange)
-        self.ax.set_xlim(0,len(self.coverageData))
+        self.ax.set_xlim(0,len(self.newDataMean))
         self.ax.set_ylim(minCov/normValue,maxCov/normValue)
         self.ax.set_title("Contig " + chromo.name)
         self.ax.set_xlabel("Position (x" + str(self.parentWidget().bpWindow) + " kb)")
@@ -398,8 +427,8 @@ class ChromoPlotWindow(QWidget):
         xmin,xmax = self.ax.get_xlim()
         if xmin < 0:
             xmin = 0
-        if xmax > len(self.coverageData):
-            xmax = len(self.coverageData)
+        if xmax > len(self.newDataMean):
+            xmax = len(self.newDataMean)
         self.ax.set_xlim(xmin,xmax)
         self.minXSet.setText(str(int(xmin)))
         self.maxXSet.setText(str(int(xmax)))
