@@ -356,8 +356,8 @@ class ChromoPlotWindow(QWidget):
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             self.coverageData.append(2*val/normValue)
 
-        #Maps colors to coverage values as follows: green: [0,0.75], blue: [0.75,1.25], red: [1.25,5]
-        colorMap = ListedColormap(['g', 'black', 'r'])
+        #Maps colors to coverage values as follows: red: [0,0.75], blue: [0.75,1.25], green: [1.25,5]
+        colorMap = ListedColormap(['r', 'black', 'g'])
         colorNorm = BoundaryNorm([1, 1.75, 2.25, 10], 3)
         #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
         points = np.array([range(len(self.coverageData)), self.coverageData]).T.reshape(-1, 1, 2)

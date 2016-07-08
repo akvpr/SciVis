@@ -19,12 +19,9 @@ class CircView(QGraphicsView):
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
         self.chromosomeItems = []
+        self.graphicItems = []
         self.coverageItems = []
-        self.distanceMarkerItems = []
-        self.chromosome_connection_list = []
-        self.regionItems = []
-        self.legendItems = []
-        self.backgroundPathItems = []
+        self.connectionItems = {}
         self.activeVariantModels = {}
         self.activeVariantTables = {}
 
@@ -45,7 +42,6 @@ class CircView(QGraphicsView):
         self.addFileText()
         self.createChInfo()
 
-        self.chromosomeItems = []
         self.chromosome_angle_list = {}
         #Create a dict representing colors for the 24 default chromosomes
         self.chromoColors = {}
@@ -405,8 +401,8 @@ class CircView(QGraphicsView):
         pixmapItem = QGraphicsPixmapItem(pixmap)
         #Moving the image to the right of the cirkos-diagram
         pixmapItem.setPos(outerChrRect.center().x() + (outerChrRect.width()/2) + (outerChrRect.width()/10), outerChrRect.center().y() - (pixmapItem.boundingRect().height()/2))
-        self.scene.addItem(pixmapItem)
         pixmapItem.setFlag(QGraphicsItem.ItemIsMovable)
+        self.scene.addItem(pixmapItem)
 
     def toggleDisp(self):
         #The row associated with the item corresponds to a chromosome
@@ -492,6 +488,7 @@ class CircView(QGraphicsView):
             chromoItem.setBrush(currentColor)
             #Add the finished graphics item to a list
             self.chromosomeItems.append(chromoItem)
+            self.scene.addItem(chromoItem)
             #Background for coverage area
             leftoverArea = QPainterPath()
             leftoverArea.moveTo(self.innerCoverageRect.center())
@@ -508,6 +505,7 @@ class CircView(QGraphicsView):
             backgroundPathItem.setBrush(Qt.lightGray)
             backgroundPathItem.setOpacity(0.5)
             self.coverageItems.append(backgroundPathItem)
+            self.scene.addItem(backgroundPathItem)
             #Saving the angles for later use, see drawConnections
             angles = [curAngle, angleIncr]
             self.chromosome_angle_list[chromo.name] = angles
@@ -561,7 +559,24 @@ class CircView(QGraphicsView):
         for path in coveragePaths:
             completeCoveragePath.addPath(path)
         self.completeCoveragePathItem = QGraphicsPathItem(completeCoveragePath)
+        #We then create a gradient with short interpolation distances, based on
+        #the rectangles used for defining coverage items
+        gradRadius = self.outerCoverageRect.width()/2
+        radialGrad = QRadialGradient(self.outerCoverageRect.center(), gradRadius)
+        diff = self.outerCoverageRect.width()/2 - self.innerCoverageRect.width()/2
+        #In setColorAt, 0 is the circle center, 1 is the edge.
+        #The coverage graph reaches from a radius of 1, to 1-diff/gradRadius, in these coordinates.
+        #We use stops for a color switch, placed in the middle of coverage graph reach.
+        radialGrad.setColorAt(1,Qt.red)
+        radialGrad.setColorAt(1-diff/gradRadius*(1/2),Qt.red)
+        radialGrad.setColorAt(1-diff/gradRadius*(1/1.99),Qt.green)
+        #Create a pen with a brush using the gradient, tell the graphic item to use the pen, add to scene.
+        covBrush = QBrush(radialGrad)
+        covPen = QPen()
+        covPen.setBrush(covBrush)
+        self.completeCoveragePathItem.setPen(covPen)
         self.coverageItems.append(self.completeCoveragePathItem)
+        self.scene.addItem(self.completeCoveragePathItem)
 
     def drawConnections(self):
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
@@ -618,10 +633,10 @@ class CircView(QGraphicsView):
                 #Creating a rectangle (1x1 pixels) around each posB point for use when heat mapping the connections
                 rect = QRect(posB.toPoint(),QSize(1,1))
                 rect.moveCenter(posB.toPoint())
-                #self.scene.addItem(QGraphicsRectItem(rect))
                 connectionInfo = [connectionItem, rect, posA, posB, chrB, counter]
                 #The item is added to a list
                 chrA.connection_list.append(connectionInfo)
+                self.connectionItems[chrA.name] = connectionInfo
                 counter = counter + 1
 
         #Checking to see if any neighbouring connections are close to eachother, if they are -> create a color gradient for both the
@@ -670,7 +685,7 @@ class CircView(QGraphicsView):
                 curAngle = chrStartAngle
                 angleIncr = degreePerBp
                 angleCounter = 0
-                distanceNameItemList = []
+
                 while curAngle < (chrStartAngle + chrEndAngle):
                     if angleCounter%10 == 0:
                         adjustPoint = QPoint(10,10)
@@ -702,22 +717,17 @@ class CircView(QGraphicsView):
                     offsetX = offsetX*textWidth
                     offsetY = ((math.cos(math.radians(curAngle) - (math.pi/2)) - 1)/2)*textHeight
                     offsetPoint = QPointF(offsetX,offsetY)
-
                     distanceNameItem.setPos(innerPath.currentPosition()+offsetPoint)
-                    distanceNameItemList.append(distanceNameItem)
-
+                    self.scene.addItem(distanceNameItem)
                     lineBetween = QLineF(outerPath.currentPosition(),innerPath.currentPosition())
                     outerPath.moveTo(lineBetween.pointAt(0))
                     outerPath.lineTo(lineBetween.pointAt(1))
-                    self.scene.addPath(innerPath)
                     angleCounter += 1
                     curAngle += angleIncr
 
                 chrStartAngle += chrEndAngle + 1
-
                 distItem = QGraphicsPathItem(outerPath)
-                self.distanceMarkerItems.append([distItem, distanceNameItemList])
-
+                self.scene.addItem(distItem)
 
             for incr in range(11):
                 if incr%10 == 0:
@@ -731,17 +741,18 @@ class CircView(QGraphicsView):
                 legendPath.lineTo(lineBetween.pointAt(1))
                 legendNameItem.setPos(legendPath.currentPosition().x()-10,legendPath.currentPosition().y()-20)
                 legendItem = QGraphicsPathItem(legendPath)
-                self.legendItems.append([legendItem, legendNameItem])
+                self.scene.addItem(legendItem)
+                self.scene.addItem(legendNameItem)
 
             lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
-
             legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
             legendPath = QPainterPath()
             legendPath.moveTo(lineBetween.pointAt(0))
             legendPath.lineTo(lineBetween.pointAt(1))
             legendTitleItem.setPos(legendPath.currentPosition().x()-75, legendPath.currentPosition().y()+20)
             legendItem = QGraphicsPathItem(legendPath)
-            self.legendItems.append([legendItem, legendTitleItem])
+            self.scene.addItem(legendItem)
+            self.scene.addItem(legendTitleItem)
 
     #Imports either a tab file with specified regions to color, or a cytoband file
     def importColorTab(self):
@@ -763,7 +774,6 @@ class CircView(QGraphicsView):
         'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
         #Every item in colorTab, if not a cytoband file, contains 4 items: chromosome name, startPos, endPos, color
         #If a cytoband file, use the stain name to determine color
-        self.regionItems = []
         for region in colorTab:
             #Find a matching chromosome item for every region and make sure it's displayed
             for chromo in self.chromosomes:
@@ -803,9 +813,8 @@ class CircView(QGraphicsView):
                     regionItem.setBrush(regionColor)
                     regionItem.setOpacity(1)
                     #Add the finished graphics item to a list
-                    self.regionItems.append(regionItem)
-        for regionItem in self.regionItems:
-            self.scene.addItem(regionItem)
+                    self.graphicItems.append(regionItem)
+                    self.scene.addItem(regionItem)
 
     def initscene(self):
         self.defineRectangles()
@@ -813,90 +822,21 @@ class CircView(QGraphicsView):
         for chrItem in self.chromosomeItems:
             #Update the color dict in case user modified these
             self.chromoColors[chrItem.nameString] = chrItem.brush().color()
-            try:
-                self.scene.removeItem(chrItem)
-            except:
-                pass
-        for covItem in self.coverageItems:
-            try:
-                self.scene.removeItem(covItem)
-            except:
-                pass
-        for distItem in self.distanceMarkerItems:
-            try:
-                self.scene.removeItem(distItem[0])
-            except:
-                pass
-            for distNameItem in distItem[1]:
-                try:
-                    self.scene.removeItem(distNameItem)
-                except:
-                    pass
-        for legendItem in self.legendItems:
-            try:
-                self.scene.removeItem(legendItem[0])
-                self.scene.removeItem(legendItem[1])
-            except:
-                pass
-        for chromo in self.chromosomes:
-             for connItem in chromo.connection_list:
-                 try:
-                     self.scene.removeItem(connItem[0])
-                 except:
-                     pass
-        for regionItem in self.regionItems:
-            try:
-                self.scene.removeItem(regionItem)
-            except:
-                pass
-        for backgroundItem in self.backgroundPathItems:
-            try:
-                self.scene.removeItem(backgroundItem)
-            except:
-                pass
+        self.scene.clear()
         self.scene.markedChromItems = []
         self.chromosomeItems = []
         self.coverageItems = []
-        self.distanceMarkerItems = []
-        self.legendItems = []
-        self.backgroundPathItems = []
-        for index in range(len(self.chromosomes)):
-             self.chromosomes[index].connection_list = []
+        self.graphicItems = []
+        for chromo in self.chromosomes:
+             chromo.connection_list = []
         #Create new graphics items, add these to the scene.
         self.makeItems()
         self.createCoverage()
         self.drawConnections()
         self.createDistanceMarkers()
-        for chrItem in self.chromosomeItems:
-            self.scene.addItem(chrItem)
-        for index in range(len(self.chromosomes)):
-             for connItem in self.chromosomes[index].connection_list:
-                 self.scene.addItem(connItem[0])
-        for distItem in self.distanceMarkerItems:
-            self.scene.addItem(distItem[0])
-            for distNameItem in distItem[1]:
-                self.scene.addItem(distNameItem)
-        for legendItem in self.legendItems:
-            self.scene.addItem(legendItem[0])
-            self.scene.addItem(legendItem[1])
-        #We then create a gradient with short interpolation distances, based on
-        #the rectangles used for defining coverage items
-        gradRadius = self.outerCoverageRect.width()/2
-        radialGrad = QRadialGradient(self.outerCoverageRect.center(), gradRadius)
-        diff = self.outerCoverageRect.width()/2 - self.innerCoverageRect.width()/2
-        #In setColorAt, 0 is the circle center, 1 is the edge.
-        #The coverage graph reaches from a radius of 1, to 1-diff/gradRadius, in these coordinates.
-        #We use stops for a color switch, placed in the middle of coverage graph reach.
-        radialGrad.setColorAt(1,Qt.green)
-        radialGrad.setColorAt(1-diff/gradRadius*(1/2),Qt.green)
-        radialGrad.setColorAt(1-diff/gradRadius*(1/1.99),Qt.red)
-        #Create a pen with a brush using the gradient, tell the graphic item to use the pen, add to scene.
-        covBrush = QBrush(radialGrad)
-        covPen = QPen()
-        covPen.setBrush(covBrush)
-        self.completeCoveragePathItem.setPen(covPen)
-        for covItem in self.coverageItems:
-            self.scene.addItem(covItem)
+        for chromo in self.chromosomes:
+            for connItem in chromo.connection_list:
+                self.scene.addItem(connItem[0])
         self.update()
 
     #Adds the VCF and TAB file names as text items to the top of the scene
