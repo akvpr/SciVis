@@ -43,7 +43,7 @@ class CoverageView(QWidget):
         self.setLayout(self.grid)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.maxColumns = 2
-        self.bpWindow = 50
+        self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
         self.createSettings()
@@ -347,6 +347,7 @@ class ChromoPlotWindow(QWidget):
         maxCov = normValue*self.parentWidget().maxCoverage
         coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
         self.coverageData = []
+        print(len(coverageChunks))
         for chunk in coverageChunks:
             val = sum(chunk) / len(chunk)
             if val > maxCov:
@@ -355,10 +356,10 @@ class ChromoPlotWindow(QWidget):
                 val = minCov
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             self.coverageData.append(2*val/normValue)
-
-        #Maps colors to coverage values as follows: red: [0,0.75], blue: [0.75,1.25], green: [1.25,5]
+        
+        #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
-        colorNorm = BoundaryNorm([1, 1.75, 2.25, 10], 3)
+        colorNorm = BoundaryNorm([0, 1.75, 2.25, 10], 3)
         
         #create new data by adding the mean between two data points to a new list - doing this 3 times
         self.newData = []
@@ -387,6 +388,9 @@ class ChromoPlotWindow(QWidget):
                 self.newDataMean.append(self.newDataTemp[index])  
                 
         #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
+        #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
+        #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
+        #Each segment is assigned the starting coverage value i.e. y1
         points = np.array([range(len(self.newDataMean)), self.newDataMean]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
         
@@ -397,21 +401,65 @@ class ChromoPlotWindow(QWidget):
 
         if plotType == 0:
             self.ax.add_collection(lc)
+            
+            #code for shadowing
+            xFillValuesHigh = []
+            xCounterHighStart = 0
+            xCounterHighEnd = 0
+            xCounter = 0
+            #Collecting consecutive points in intervals where the coverage is above 2.25
+            for y_value in self.newDataMean:
+                xCounter += 1
+                if y_value > 2.25:
+                    xCounterHighEnd += 1
+                else:
+                    xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
+                    xCounterHighStart = xCounter
+                    xCounterHighEnd = 0
+            
+            xFillValuesLow = []
+            xCounterLowStart = 0
+            xCounterLowEnd = 0
+            xCounter = 0
+            #Collecting consecutive points in intervals where the coverage is below 1.75
+            for y_value in self.newDataMean:
+                xCounter += 1
+                if y_value < 1.75:
+                    xCounterLowEnd += 1
+                else:
+                    xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
+                    xCounterLowStart = xCounter
+                    xCounterLowEnd = 0
+            
+            #"Shadows" areas where the coverage is below 1.75 and above 2.25 in the graph for intervals larger than 10
+            for values in xFillValuesLow:
+                if (values[1] - values[0]) > 10:
+                    self.ax.fill_between(range(values[0], values[1]+1), 1.75, self.newDataMean[values[0]:values[1]+1], facecolor='r', interpolate=True, edgecolor = 'r')               
+            for values in xFillValuesHigh:
+                if (values[1] - values[0]) > 10:
+                    self.ax.fill_between(range(values[0], values[1]+1), 2.25, self.newDataMean[values[0]:values[1]+1], facecolor='g', interpolate = True, edgecolor = 'g')
+                
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow/8) + " kb)"
+            self.dataList = self.newDataMean    
+                
+                
         elif plotType == 1:
             self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm)
-
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
+            self.dataList = self.coverageData
+                
         #Create an input validator for the manual x range input boxes, range is no of bins
-        self.xRangeValidator = QIntValidator(0,len(self.newDataMean),self)
+        self.xRangeValidator = QIntValidator(0,len(self.dataList),self)
         self.minXSet.setValidator(self.xRangeValidator)
         self.maxXSet.setValidator(self.xRangeValidator)
         self.minXSet.setText("0")
-        self.maxXSet.setText(str(len(self.newDataMean)))
+        self.maxXSet.setText(str(len(self.dataList)))
         self.minXSet.returnPressed.connect(self.updateXRange)
         self.maxXSet.returnPressed.connect(self.updateXRange)
-        self.ax.set_xlim(0,len(self.newDataMean))
+        self.ax.set_xlim(0,len(self.dataList))
         self.ax.set_ylim(minCov/normValue,maxCov/normValue)
         self.ax.set_title("Contig " + chromo.name)
-        self.ax.set_xlabel("Position (x" + str(self.parentWidget().bpWindow) + " kb)")
+        self.ax.set_xlabel(xLabelText)
         self.ax.set_ylabel("Coverage")
         self.canvas.updateGeometry()
         self.canvas.draw()
@@ -427,8 +475,8 @@ class ChromoPlotWindow(QWidget):
         xmin,xmax = self.ax.get_xlim()
         if xmin < 0:
             xmin = 0
-        if xmax > len(self.newDataMean):
-            xmax = len(self.newDataMean)
+        if xmax > len(self.dataList):
+            xmax = len(self.dataList)
         self.ax.set_xlim(xmin,xmax)
         self.minXSet.setText(str(int(xmin)))
         self.maxXSet.setText(str(int(xmax)))
