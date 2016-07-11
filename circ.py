@@ -14,7 +14,6 @@ class CircView(QGraphicsView):
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
-        self.numChr = len(self.chromosomes)
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
@@ -254,7 +253,7 @@ class CircView(QGraphicsView):
 
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
-        varModel = VariantItemModel()
+        varModel = QStandardItemModel()
         topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score', 'Active']
         varModel.setHorizontalHeaderLabels(topstring)
         #Adding variant info to a list
@@ -263,16 +262,25 @@ class CircView(QGraphicsView):
             #this is event_type in the variant
             infoitem.append(QStandardItem(variant[4]))
             #this is posA in the variant
-            startText = str(variant[1])
-            startData = QStandardItem()
-            startData.setData(variant[1],0)
-            infoitem.append(startData)
+            startItem = QStandardItem()
+            #set data with start as role 0
+            startItem.setData(variant[1],0)
+            infoitem.append(startItem)
             #this is posB or chrB: posB in the variant (if interchromosomal)
             if variant[0] is not variant[2]:
                 endText = str(variant[2]) + ": " + str(variant[3])
+                endItem = QStandardItem()
+                #if chrB, set this as data with role 1, end as role 2
+                endItem.setData(variant[2],1)
+                endItem.setData(variant[3],2)
             else:
                 endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
+                endItem = QStandardItem()
+                #if no chrB, set 0 as role 1, end as role 2
+                endItem.setData(str(0),1)
+                endItem.setData(variant[3],2)
+            endItem.setData(endText,Qt.DisplayRole)
+            infoitem.append(endItem)
             #this is allGenes in the variant
             infoitem.append(QStandardItem(variant[7]))
             #this is cband in the variant
@@ -284,17 +292,16 @@ class CircView(QGraphicsView):
             dispCheckItem.setCheckable(False)
             dispCheckItem.setCheckState(Qt.Checked)
             infoitem.append(dispCheckItem)
-
             varModel.appendRow(infoitem)
-
         self.activeVariantModels[chromo.name] = varModel
 
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
             self.createVariantInfo(chromo)
@@ -304,28 +311,30 @@ class CircView(QGraphicsView):
             #Create button for activation of variants
             varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
             varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
-
             varList.setSortingEnabled(True)
             varList.setMinimumSize(700,400)
             varList.verticalHeader().hide()
             varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.activeVariantModels[chromo.name])
+            sourceModel = self.activeVariantModels[chromo.name]
+            proxyModel = VariantSortModel(self)
+            proxyModel.setSourceModel(sourceModel)
+            varList.setModel(proxyModel)
             varList.resizeColumnToContents(1)
-            varList.horizontalHeader().sectionClicked.connect(chromo.sortVariants)
-
+            varList.resizeColumnToContents(2)
             self.activeVariantTables[chromo.name] = varList
-
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
             viewVarDia.layout.addWidget(varButton, 1, 0)
             viewVarDia.show()
 
+    #Toggles individual variants on and off
     def toggleVariants(self, chromoName, chromoIndex):
-        selectedIndexes = self.activeVariantTables[chromoName].selectedIndexes()
+        selectedProxyIndexes = self.activeVariantTables[chromoName].selectedIndexes()
+        #Selected indexes are indexes in proxy model, so translate to source indexes
+        selectedIndexes = [self.activeVariantTables[chromoName].model().mapToSource(proxyIndex) for proxyIndex in selectedProxyIndexes]
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
-            #sätta varModel i en lista å ta chromoIndex modellen för itemet
             dispVarItem = self.activeVariantModels[chromoName].item(row,6)
             if self.chromosomes[chromoIndex].variants[row][9]:
                 dispVarItem.setCheckState(Qt.Unchecked)
@@ -336,9 +345,9 @@ class CircView(QGraphicsView):
         self.chromosomes[chromoIndex].createConnections()
         self.initscene()
 
+    #Adds a variant to selected chromosomes. Some models still have to be updated.
+    #Not sure how to best handle input yet.
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
@@ -388,6 +397,7 @@ class CircView(QGraphicsView):
                     end = "."
                 chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
 
+    #Reads an image and adds it to the scene
     def addImage(self):
         self.defineRectangles()
         outerChrRect = self.outerChrRect
@@ -404,6 +414,7 @@ class CircView(QGraphicsView):
         pixmapItem.setFlag(QGraphicsItem.ItemIsMovable)
         self.scene.addItem(pixmapItem)
 
+    #Toggles display of whole chromosomes on or off
     def toggleDisp(self):
         #The row associated with the item corresponds to a chromosome
         selectedIndexes = self.chList.selectedIndexes()
@@ -423,6 +434,7 @@ class CircView(QGraphicsView):
                 self.chromosomes[row].display = True
         self.initscene()
 
+    #Toggles if connections for variants are to be displayed for a chromosome
     def toggleConnections(self):
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
@@ -437,6 +449,7 @@ class CircView(QGraphicsView):
                 self.chromosomes[row].display_connections = True
         self.initscene()
 
+    #Toggles coverage items on or off
     def toggleCoverage(self):
         for covItem in self.coverageItems:
             if covItem.isVisible():
@@ -444,6 +457,7 @@ class CircView(QGraphicsView):
             else:
                 covItem.show()
 
+    #Define rectangles used for drawing of chromosomes etc, if user has changed window size
     def defineRectangles(self):
         size = self.size()
         self.outerChrRect = QRect(QPoint(50,50), QPoint(size.height()-50,size.height()-50))
@@ -582,6 +596,7 @@ class CircView(QGraphicsView):
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         counter = 0
         for chrA in self.chromosomeDict.values():
+            self.connectionItems[chrA.name] = []
             if not (chrA.display_connections and chrA.display):
                 continue
             #only create the connection list if it has not been initialized earlier
@@ -635,25 +650,24 @@ class CircView(QGraphicsView):
                 rect.moveCenter(posB.toPoint())
                 connectionInfo = [connectionItem, rect, posA, posB, chrB, counter]
                 #The item is added to a list
-                chrA.connection_list.append(connectionInfo)
-                self.connectionItems[chrA.name] = connectionInfo
+                self.connectionItems[chrA.name].append(connectionInfo)
                 counter = counter + 1
 
         #Checking to see if any neighbouring connections are close to eachother, if they are -> create a color gradient for both the
         #neighbouring connection lines, that gets darker closer to the connection
-        for index1 in range(len(self.chromosomes)):
-            for connItem1 in self.chromosomes[index1].connection_list:
-                for index2 in range(len(self.chromosomes)):
-                    for connItem2 in self.chromosomes[index2].connection_list:
+        for chrA in self.chromosomes:
+            for connItemA in self.connectionItems[chrA.name]:
+                for chrB in self.chromosomes:
+                    for connItemB in self.connectionItems[chrB.name]:
                         #check to see if one rectangle is comparing with itself
-                        if connItem1[5] == connItem2[5]:
+                        if connItemA[5] == connItemB[5]:
                             continue
-                        if connItem1[1].intersects(connItem2[1]):
-                            linearGrad = QLinearGradient(connItem1[2], connItem1[3])
-                            linearGrad.setColorAt(0, self.chromoColors[connItem1[4].name])
-                            linearGrad.setColorAt(1, self.chromoColors[connItem1[4].name].darker(300))
-                            connItem1[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
-                            connItem2[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
+                        if connItemA[1].intersects(connItemB[1]):
+                            linearGrad = QLinearGradient(connItemA[2], connItemA[3])
+                            linearGrad.setColorAt(0, self.chromoColors[connItemA[4].name])
+                            linearGrad.setColorAt(1, self.chromoColors[connItemA[4].name].darker(300))
+                            connItemA[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
+                            connItemB[0].setPen(QPen(QBrush(linearGrad), self.connWidth))
 
     def numDispChromosomes(self):
         dispChromos = 0
@@ -834,8 +848,8 @@ class CircView(QGraphicsView):
         self.createCoverage()
         self.drawConnections()
         self.createDistanceMarkers()
-        for chromo in self.chromosomes:
-            for connItem in chromo.connection_list:
+        for connList in self.connectionItems.values():
+            for connItem in connList:
                 self.scene.addItem(connItem[0])
         self.update()
 
@@ -856,12 +870,66 @@ class CircView(QGraphicsView):
             self.scale(1.1,1.1)
         else:
             QGraphicsView.wheelEvent(self, event)
-#Custom class of the variant model to handle sorting on columns
-class VariantItemModel(QStandardItemModel):
+
+#Custom class of proxy model to handle custom sorting of variants
+class VariantSortModel(QSortFilterProxyModel):
 
     def sort(self, column, order):
-        if column == 0 or column == 1 or column == 2 or column == 3 or column == 4 or column == 5:
-            QStandardItemModel.sort(self, column, order)
+        if column != 6:
+            QSortFilterProxyModel.sort(self,column,order)
+
+    #Return true if left less than right, otherwise false
+    #left and right are QModelIndexes, taking displayrole data by default
+    def lessThan(self, left, right):
+        if left.column() == 0:
+            #sort alphabetically by TYPE
+            leftData = self.sourceModel().data(left)
+            rightData = self.sourceModel().data(right)
+            return leftData < rightData
+        elif left.column() == 1:
+            #sort by START as ints
+            leftData = int(self.sourceModel().data(left,0))
+            rightData = int(self.sourceModel().data(right,0))
+            return leftData < rightData
+        elif left.column() == 2:
+            #if the column is 2, i.e. END, see if role 3 data for both items is > 0 (both have chrB)
+            #if only one of the items has chrB, put item with chrB as less than
+            leftData = self.sourceModel().data(left,1)
+            rightData = self.sourceModel().data(right,1)
+            if leftData != '0' and rightData != '0':
+                #If both are digits (i.e. not X,Y,GL.. etc), compare as ints
+                #If only one is digit put digit chr as the lesser data
+                if leftData.isdigit() and rightData.isdigit():
+                    return int(leftData) < int(rightData)
+                elif leftData.isdigit():
+                    return True
+                elif rightData.isdigit():
+                    return False
+                else:
+                    return leftData < rightData
+            elif leftData != '0':
+                return True
+            elif rightData != '0':
+                return False
+            else:
+                #If no item has chrB, sort by end as an int
+                leftData = int(self.sourceModel().data(left,2))
+                rightData = int(self.sourceModel().data(right,2))
+                return leftData < rightData
+        elif left.column() == 3 or left.column() == 4:
+            #sort alphabetically by GENE(S) or CYTOBAND
+            leftData = self.sourceModel().data(left)
+            rightData = self.sourceModel().data(right)
+            return leftData < rightData
+        elif left.column() == 5:
+            #sort by Rank Score. Format is x:y Second value is priority.
+            leftData = self.sourceModel().data(left)
+            rightData = self.sourceModel().data(right)
+            leftSecondValue = int(leftData.split(':')[1])
+            rightSecondValue = int(rightData.split(':')[1])
+            return leftSecondValue < rightSecondValue
+        else:
+            return leftData < rightData
 
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
