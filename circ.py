@@ -32,6 +32,7 @@ class CircView(QGraphicsView):
         self.startColor = QColor.fromRgb(243,241,172)
         self.connWidth = 1
         self.showChrNames = True
+        self.showCentromereRegion = False
         self.createSettings()
 
         self.coverageNormLog = self.dataDict['coverageNormLog']
@@ -42,7 +43,7 @@ class CircView(QGraphicsView):
         self.createChInfo()
 
         self.chromosome_angle_list = {}
-        #Create a dict representing colors for the 24 default chromosomes
+        #Create a dict representing colors for the chromosomes
         self.chromoColors = {}
         color = self.startColor
         for chromo in self.chromosomes:
@@ -109,6 +110,13 @@ class CircView(QGraphicsView):
         showChrNameCheck.setCheckable(True)
         showChrNameCheck.setCheckState(Qt.Checked)
         showChrNameCheck.setEditable(False)
+        showCentromereRegionText = QStandardItem("Mark centromeres")
+        showCentromereRegionText.setEditable(False)
+        showCentromereRegionText.setToolTip("Add markings for centromere regions")
+        showCentromereRegionCheck = QStandardItem()
+        showCentromereRegionCheck.setCheckable(True)
+        showCentromereRegionCheck.setCheckState(Qt.Unchecked)
+        showCentromereRegionCheck.setEditable(False)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
         self.settingsModel.setItem(1,0,distResText)
@@ -123,6 +131,8 @@ class CircView(QGraphicsView):
         self.settingsModel.setItem(5,1,connPenWidthData)
         self.settingsModel.setItem(6,0,showChrNameText)
         self.settingsModel.setItem(6,1,showChrNameCheck)
+        self.settingsModel.setItem(7,0,showCentromereRegionText)
+        self.settingsModel.setItem(7,1,showCentromereRegionCheck)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
     def viewSettings(self):
@@ -157,6 +167,8 @@ class CircView(QGraphicsView):
             self.connWidth = item.data(0)
         if item.row() == 6:
            self.showChrNames = not self.showChrNames
+        if item.row() == 7:
+           self.showCentromereRegion = not self.showCentromereRegion
 
     #Sums the end bp for every chromosome with display toggled on
     def returnTotalDisplayedBP(self):
@@ -290,7 +302,10 @@ class CircView(QGraphicsView):
             #this is a check for displaying a variant or not
             dispCheckItem = QStandardItem()
             dispCheckItem.setCheckable(False)
-            dispCheckItem.setCheckState(Qt.Checked)
+            if variant[9]:
+                dispCheckItem.setCheckState(Qt.Checked)
+            else:
+                dispCheckItem.setCheckState(Qt.Unchecked)
             infoitem.append(dispCheckItem)
             varModel.appendRow(infoitem)
         self.activeVariantModels[chromo.name] = varModel
@@ -775,13 +790,26 @@ class CircView(QGraphicsView):
         if fileName.endswith("tab"):
             reader.readColorTab(fileName)
             colorTab = reader.returnColorTab()
-            self.colorRegions(colorTab,False)
+            self.colorRegions(colorTab,False,1)
         else:
             reader.readCytoTab(fileName)
             colorTab = reader.returnCytoTab()
-            self.colorRegions(colorTab,True)
+            self.colorRegions(colorTab,True,1)
 
-    def colorRegions(self,colorTab,cytoband):
+    def colorCentromeres(self):
+        #Look in the cyto file definitions for acen regions, prepare a list of chromosomes and positions for these
+        cytoTab = self.dataDict['cytoTab']
+        centromereRegions = []
+        for cyto in cytoTab:
+            if cyto[4] == 'acen':
+                chromoName = cyto[0]
+                cytoStart = int(cyto[1])
+                cytoEnd = int(cyto[2])
+                color = 'red'
+                centromereRegions.append([chromoName,cytoStart,cytoEnd,color])
+        self.colorRegions(centromereRegions,False,0.5)
+
+    def colorRegions(self,colorTab,cytoband,opacity):
         self.defineRectangles()
         colors = {'red': Qt.red, 'magenta': Qt.magenta, 'blue': Qt.blue, 'cyan': Qt.cyan, 'yellow': Qt.yellow, 'darkBlue': Qt.darkBlue}
         stainColors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
@@ -825,7 +853,7 @@ class CircView(QGraphicsView):
                     else:
                         regionColor = colors[region[3]]
                     regionItem.setBrush(regionColor)
-                    regionItem.setOpacity(1)
+                    regionItem.setOpacity(opacity)
                     #Add the finished graphics item to a list
                     self.graphicItems.append(regionItem)
                     self.scene.addItem(regionItem)
@@ -841,8 +869,6 @@ class CircView(QGraphicsView):
         self.chromosomeItems = []
         self.coverageItems = []
         self.graphicItems = []
-        for chromo in self.chromosomes:
-             chromo.connection_list = []
         #Create new graphics items, add these to the scene.
         self.makeItems()
         self.createCoverage()
@@ -851,6 +877,8 @@ class CircView(QGraphicsView):
         for connList in self.connectionItems.values():
             for connItem in connList:
                 self.scene.addItem(connItem[0])
+        if self.showCentromereRegion:
+            self.colorCentromeres()
         self.update()
 
     #Adds the VCF and TAB file names as text items to the top of the scene
@@ -938,7 +966,7 @@ class ChromoGraphicItem(QGraphicsPathItem):
         super().__init__(path)
         self.selected = False
         self.nameString = nameString
-        self.setData(0,"CustomSelection")
+        self.setData(0,"ChromoItem")
         self.setPen(QPen(Qt.black,1))
 
     #Marks the chromosome item with a blue outline if selected
@@ -955,6 +983,7 @@ class ChromoGraphicItem(QGraphicsPathItem):
         self.selected = False
 
     #Paints the name of the chromosone in the middle of the item -- possible to implemend changing of font etc if needed
+    #Put this in separate function for more flexible handling of when name is painted?
     def paint(self,painter,option,widget):
         super().paint(painter,option,widget)
         painter.drawText(self.path().boundingRect().center(),self.nameString)
@@ -975,7 +1004,7 @@ class CircScene(QGraphicsScene):
                 continue
             #Items with custom selection behavior have custom data
             #These should have their own handling; other items go through the default implementation
-            if (item.data(0) == "CustomSelection"):
+            if (item.data(0) == "ChromoItem"):
                 if item.selected:
                     item.unmark()
                     self.markedChromItems.remove(item)
@@ -1013,6 +1042,8 @@ class CircScene(QGraphicsScene):
             chosenColor = QColorDialog.getColor(initialColor)
             for item in self.markedChromItems:
                 item.setBrush(chosenColor)
+                #Update color dict
+                self.views()[0].chromoColors[item.nameString] = chosenColor
                 item.unmark()
             self.markedChromItems = []
 
