@@ -347,7 +347,6 @@ class ChromoPlotWindow(QWidget):
         maxCov = normValue*self.parentWidget().maxCoverage
         coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
         self.coverageData = []
-        print(len(coverageChunks))
         for chunk in coverageChunks:
             val = sum(chunk) / len(chunk)
             if val > maxCov:
@@ -360,87 +359,34 @@ class ChromoPlotWindow(QWidget):
         #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
         colorNorm = BoundaryNorm([0, 1.75, 2.25, 10], 3)
-        
-        #create new data by adding the mean between two data points to a new list - doing this 3 times
-        self.newData = []
-        self.newDataTemp = []
-        self.newDataMean = []
-        
-        for index in range(len(self.coverageData)):   
-            if index < len(self.coverageData)-1:
-                self.newData.append(self.coverageData[index])
-                self.newData.append((self.coverageData[index] + self.coverageData[index+1])/2)
-            else:
-                self.newData.append(self.coverageData[index])
-        
-        for index in range(len(self.newData)):   
-            if index < len(self.newData)-1:
-                self.newDataTemp.append(self.newData[index])
-                self.newDataTemp.append((self.newData[index] + self.newData[index+1])/2)
-            else:
-                self.newDataTemp.append(self.newData[index])   
-        
-        for index in range(len(self.newDataTemp)):   
-            if index < len(self.newDataTemp)-1:
-                self.newDataMean.append(self.newDataTemp[index])
-                self.newDataMean.append((self.newDataTemp[index] + self.newDataTemp[index+1])/2)
-            else:
-                self.newDataMean.append(self.newDataTemp[index])  
-                
-        #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-        #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
-        #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
-        #Each segment is assigned the starting coverage value i.e. y1
-        points = np.array([range(len(self.newDataMean)), self.newDataMean]).T.reshape(-1, 1, 2)
-        segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        
-        #converting the coverageData list into a numpy array needed for the LineCollection
-        numpyArrayCData = np.array(self.newDataMean)
-        lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
-        lc.set_array(numpyArrayCData)
 
         if plotType == 0:
+        
+            #Adding more data points in order to get make shorter segments for a more accurate coloring
+            #create new data by adding the mean between two data points to a new list - doing this 3 times
+            extendedData = self.getMean(self.coverageData)
+          
+            #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
+            #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
+            #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
+            #Each segment is assigned the starting coverage value i.e. y1
+            #The segments are then joined together to a "line collection" and are colored according to the colorMap and colorNorm.
+            points = np.array([range(len(extendedData)), extendedData]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            
+            #converting the coverageData list into a numpy array needed for the LineCollection
+            numpyArrayCData = np.array(extendedData)
+            lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
+            lc.set_array(numpyArrayCData)
+        
             self.ax.add_collection(lc)
-            
-            #code for shadowing
-            xFillValuesHigh = []
-            xCounterHighStart = 0
-            xCounterHighEnd = 0
-            xCounter = 0
-            #Collecting consecutive points in intervals where the coverage is above 2.25
-            for y_value in self.newDataMean:
-                xCounter += 1
-                if y_value > 2.25:
-                    xCounterHighEnd += 1
-                else:
-                    xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
-                    xCounterHighStart = xCounter
-                    xCounterHighEnd = 0
-            
-            xFillValuesLow = []
-            xCounterLowStart = 0
-            xCounterLowEnd = 0
-            xCounter = 0
-            #Collecting consecutive points in intervals where the coverage is below 1.75
-            for y_value in self.newDataMean:
-                xCounter += 1
-                if y_value < 1.75:
-                    xCounterLowEnd += 1
-                else:
-                    xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
-                    xCounterLowStart = xCounter
-                    xCounterLowEnd = 0
-            
-            #"Shadows" areas where the coverage is below 1.75 and above 2.25 in the graph for intervals larger than 10
-            for values in xFillValuesLow:
-                if (values[1] - values[0]) > 10:
-                    self.ax.fill_between(range(values[0], values[1]+1), 1.75, self.newDataMean[values[0]:values[1]+1], facecolor='r', interpolate=True, edgecolor = 'r')               
-            for values in xFillValuesHigh:
-                if (values[1] - values[0]) > 10:
-                    self.ax.fill_between(range(values[0], values[1]+1), 2.25, self.newDataMean[values[0]:values[1]+1], facecolor='g', interpolate = True, edgecolor = 'g')
+            dupLimit = 2.25
+            delLimit = 1.75
+            intervalSize = 10
+            self.shadow(extendedData,dupLimit,delLimit,intervalSize)
                 
-            xLabelText = "Position (x" + str(self.parentWidget().bpWindow/8) + " kb)"
-            self.dataList = self.newDataMean    
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow/10) + " kb)"
+            self.dataList = extendedData    
                 
                 
         elif plotType == 1:
@@ -464,6 +410,90 @@ class ChromoPlotWindow(QWidget):
         self.canvas.updateGeometry()
         self.canvas.draw()
 
+    def shadow(self, data, dupLimit, delLimit, intervalSize):
+    
+        #code for shadowing
+        xFillValuesHigh = []
+        xCounterHighStart = 0
+        xCounterHighEnd = 0
+        xCounter = 0
+        #Collecting consecutive points in intervals where the coverage is above dupLimit
+        for y_value in data:
+            xCounter += 1
+            if y_value > dupLimit:
+                xCounterHighEnd += 1
+            else:
+                xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
+                xCounterHighStart = xCounter
+                xCounterHighEnd = 0
+        
+        xFillValuesLow = []
+        xCounterLowStart = 0
+        xCounterLowEnd = 0
+        xCounter = 0
+        #Collecting consecutive points in intervals where the coverage is below delLimit
+        for y_value in data:
+            xCounter += 1
+            if y_value < delLimit:
+                xCounterLowEnd += 1
+            else:
+                xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
+                xCounterLowStart = xCounter
+                xCounterLowEnd = 0    
+                
+        #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
+        for values in xFillValuesLow:
+            start = values[0]
+            stop = values[1]
+            if (stop - start) > intervalSize:
+                self.ax.fill_between(range(start, stop), delLimit, data[start:stop], facecolor='r', interpolate=True, edgecolor = 'r')               
+        for values in xFillValuesHigh:
+            start = values[0]
+            stop = values[1]
+            if (stop - start) > intervalSize:
+                self.ax.fill_between(range(start, stop), dupLimit, data[start:stop], facecolor='g', interpolate = True, edgecolor = 'g')
+        
+    def getMean(self, data):
+    
+        newData = []
+        newDataTemp = []
+        newDataMean = []
+        extendedData = []
+        
+        for index in range(len(data)):   
+            if index < len(data)-1:
+                newData.append(data[index])
+                newData.append((data[index] + data[index+1])/2)
+            else:
+                newData.append(data[index])  
+        
+        for index in range(len(newData)):   
+            if index < len(newData)-1:
+                newDataTemp.append(newData[index])
+                newDataTemp.append((newData[index] + newData[index+1])/2)
+            else:
+                newDataTemp.append(newData[index])   
+        
+        for index in range(len(newDataTemp)):   
+            if index < len(newDataTemp)-1:
+                newDataMean.append(newDataTemp[index])
+                newDataMean.append((newDataTemp[index] + newDataTemp[index+1])/2)
+            else:
+                newDataMean.append(newDataTemp[index]) 
+                
+        oldNumber = len(data)
+        newNumber = len(newDataMean)
+        spacing = round((newNumber / (2*oldNumber)),0)
+
+        for index in range(len(newDataMean)):
+            if index%spacing == 0 and index < len(newDataMean)-1:
+                extendedData.append(newDataMean[index])
+                extendedData.append((newDataMean[index] + newDataMean[index+1])/2)
+            else:
+                extendedData.append(newDataMean[index])
+
+        return extendedData
+        
     def on_key_press(self, event):
         key_press_handler(event, self.canvas, self.mpl_toolbar)
 
