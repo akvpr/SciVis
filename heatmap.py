@@ -382,8 +382,8 @@ class HeatmapWindow(QWidget):
                     counter = 0
                     for variant in chromoA.variants:
                         #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
-                       if (variant[1]==self.mapping):
-                            start = int(variant[0])
+                       if (variant[4]==self.mapping):
+                            start = int(variant[1])
                             end = int(variant[3])
                             pos = (end + start)/2
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
