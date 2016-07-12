@@ -345,25 +345,28 @@ class ChromoPlotWindow(QWidget):
         normValue = self.parentWidget().coverageNorm
         minCov = normValue*self.parentWidget().minCoverage
         maxCov = normValue*self.parentWidget().maxCoverage
-        coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
+        dupLimit = 2.25
+        delLimit = 1.75
         self.coverageData = []
-        for chunk in coverageChunks:
-            val = sum(chunk) / len(chunk)
-            if val > maxCov:
-                val = maxCov
-            if val < minCov:
-                val = minCov
-            #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
-            self.coverageData.append(2*val/normValue)
         
         #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
-        colorNorm = BoundaryNorm([0, 1.75, 2.25, 10], 3)
+        colorNorm = BoundaryNorm([0, delLimit, dupLimit, 10], 3)
 
         if plotType == 0:
         
+            coverageChunks = [chromo.coverage[i:i+(self.parentWidget().bpWindow*10)] for i in range(0,len(chromo.coverage),(self.parentWidget().bpWindow*10))]
+            for chunk in coverageChunks:
+                val = sum(chunk) / len(chunk)
+                if val > maxCov:
+                    val = maxCov
+                if val < minCov:
+                    val = minCov
+                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
+                self.coverageData.append(2*val/normValue)
+        
             #Adding more data points in order to get make shorter segments for a more accurate coloring
-            #create new data by adding the mean between two data points to a new list - doing this 3 times
+            #the goal is to get 10 times more data points, this is not precisely achieved. With resolution 100kb we get 9,964x, 10kb -> 9,9964x, 1kb -> 9,9996x
             extendedData = self.getMean(self.coverageData)
           
             #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
@@ -371,6 +374,7 @@ class ChromoPlotWindow(QWidget):
             #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
             #Each segment is assigned the starting coverage value i.e. y1
             #The segments are then joined together to a "line collection" and are colored according to the colorMap and colorNorm.
+            #A y1 value below 1.75 -> red color, a y1 value between 1.75 and 2.25 -> black and y1 > 2.25 -> green
             points = np.array([range(len(extendedData)), extendedData]).T.reshape(-1, 1, 2)
             segments = np.concatenate([points[:-1], points[1:]], axis=1)
             
@@ -378,18 +382,24 @@ class ChromoPlotWindow(QWidget):
             numpyArrayCData = np.array(extendedData)
             lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
             lc.set_array(numpyArrayCData)
-        
             self.ax.add_collection(lc)
-            dupLimit = 2.25
-            delLimit = 1.75
             intervalSize = 10
-            self.shadow(extendedData,dupLimit,delLimit,intervalSize)
-                
-            xLabelText = "Position (x" + str(self.parentWidget().bpWindow/10) + " kb)"
+            self.shadow(extendedData,dupLimit,delLimit,intervalSize)  
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = extendedData    
-                
-                
+    
         elif plotType == 1:
+        
+            coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
+            for chunk in coverageChunks:
+                val = sum(chunk) / len(chunk)
+                if val > maxCov:
+                    val = maxCov
+                if val < minCov:
+                    val = minCov
+                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
+                self.coverageData.append(2*val/normValue)
+        
             self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm)
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = self.coverageData
@@ -410,6 +420,9 @@ class ChromoPlotWindow(QWidget):
         self.canvas.updateGeometry()
         self.canvas.draw()
 
+    
+        
+        
     def shadow(self, data, dupLimit, delLimit, intervalSize):
     
         #code for shadowing
@@ -454,12 +467,17 @@ class ChromoPlotWindow(QWidget):
                 self.ax.fill_between(range(start, stop), dupLimit, data[start:stop], facecolor='g', interpolate = True, edgecolor = 'g')
         
     def getMean(self, data):
-    
+        
+        #the goal of this function is to increase the amount of data points 10 times
+        #to achieve this the mean is taken between two adjacent data points and added to a new list along with the old data points
+        #example: [5, 10, 15, 20] -> [5, 7.5, 10, 12.5, 15, 17.5, 20]
+        #this is done three times
         newData = []
         newDataTemp = []
         newDataMean = []
         extendedData = []
         
+        #if data has x data points, newData will have 2x-1
         for index in range(len(data)):   
             if index < len(data)-1:
                 newData.append(data[index])
@@ -467,6 +485,7 @@ class ChromoPlotWindow(QWidget):
             else:
                 newData.append(data[index])  
         
+        #if data has x data points, newDataTemp will have 2*(2x-1)-1 = 4x-3
         for index in range(len(newData)):   
             if index < len(newData)-1:
                 newDataTemp.append(newData[index])
@@ -474,6 +493,7 @@ class ChromoPlotWindow(QWidget):
             else:
                 newDataTemp.append(newData[index])   
         
+        #if data has x data points, newDataMean will have 2*(2*(2x-1)-1)-1 = 2*(4x-3)-1 = 8x-7
         for index in range(len(newDataTemp)):   
             if index < len(newDataTemp)-1:
                 newDataMean.append(newDataTemp[index])
@@ -481,9 +501,11 @@ class ChromoPlotWindow(QWidget):
             else:
                 newDataMean.append(newDataTemp[index]) 
                 
-        oldNumber = len(data)
-        newNumber = len(newDataMean)
-        spacing = round((newNumber / (2*oldNumber)),0)
+        #if data has x data points then, in order to get 10x data points we need to add 2x+7 to 8x-7
+        #this is done by taking the mean 2x+7 times and spacing these out evenly. 
+        oldLength = len(data)
+        newLength = len(newDataMean)
+        spacing = round((newLength / ((2*oldLength)+7)),0)
 
         for index in range(len(newDataMean)):
             if index%spacing == 0 and index < len(newDataMean)-1:
@@ -491,7 +513,7 @@ class ChromoPlotWindow(QWidget):
                 extendedData.append((newDataMean[index] + newDataMean[index+1])/2)
             else:
                 extendedData.append(newDataMean[index])
-
+        
         return extendedData
         
     def on_key_press(self, event):
