@@ -38,6 +38,7 @@ class CoverageView(QWidget):
         super().__init__()
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.cytoInfo = self.dataDict['cytoTab']
         self.subWindows = []
         self.grid = QGridLayout()
         self.setLayout(self.grid)
@@ -78,7 +79,7 @@ class CoverageView(QWidget):
         choice = addDialog.exec_()
         if choice == QDialog.Accepted:
             chromo = self.chromosomes[chromoBox.currentIndex()]
-            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(),self)
+            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(), self.cytoInfo,self)
             self.subWindows.append(chromoPlot)
             self.arrangePlots()
 
@@ -313,9 +314,11 @@ class CoverageView(QWidget):
 #Widget containing a pyplot, plotting coverage data from given chromosome
 class ChromoPlotWindow(QWidget):
 
-    def __init__(self,chromo,plotType,parent):
+    def __init__(self,chromo,plotType, cytoInfo,parent):
         super().__init__(parent)
         self.chromo = chromo
+        self.plotType = plotType
+        self.cytoInfo = cytoInfo
         self.setMinimumSize(500,500)
         self.figure = Figure(figsize=(5,2),dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -335,6 +338,7 @@ class ChromoPlotWindow(QWidget):
         self.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.canvas.mpl_connect('draw_event', self.updateSetLimits)
         self.canvas.mpl_connect('button_release_event', self.onClick)
+        self.canvas.mpl_connect('pick_event', self.onpick)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self.canvas)
@@ -349,11 +353,17 @@ class ChromoPlotWindow(QWidget):
         delLimit = 1.75
         self.coverageData = []
         
+        #Identifies centromere regions according to the cytoTab file
+        centromerePos = []
+        for cyto in self.cytoInfo:
+            if cyto[0] == self.chromo.name and cyto[4] == 'acen':
+                centromerePos.append([int(cyto[1]), int(cyto[2])])
+    
         #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
         colorNorm = BoundaryNorm([0, delLimit, dupLimit, 10], 3)
 
-        if plotType == 0:
+        if self.plotType == 0:
         
             coverageChunks = [chromo.coverage[i:i+(self.parentWidget().bpWindow*10)] for i in range(0,len(chromo.coverage),(self.parentWidget().bpWindow*10))]
             for chunk in coverageChunks:
@@ -368,7 +378,12 @@ class ChromoPlotWindow(QWidget):
             #Adding more data points in order to get make shorter segments for a more accurate coloring
             #the goal is to get 10 times more data points, this is not precisely achieved. With resolution 100kb we get 9,964x, 10kb -> 9,9964x, 1kb -> 9,9996x
             extendedData = self.getMean(self.coverageData)
-          
+            
+            #gives centromere regions the value 2
+            for pos in centromerePos:
+                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
+                    extendedData[index] = 2
+            
             #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
             #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
             #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
@@ -380,15 +395,16 @@ class ChromoPlotWindow(QWidget):
             
             #converting the coverageData list into a numpy array needed for the LineCollection
             numpyArrayCData = np.array(extendedData)
-            lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
+            lc = LineCollection(segments, cmap=colorMap, norm=colorNorm, pickradius=10)
             lc.set_array(numpyArrayCData)
+            lc.set_picker(True)
             self.ax.add_collection(lc)
             intervalSize = 10
             self.shadow(extendedData,dupLimit,delLimit,intervalSize)  
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = extendedData    
-    
-        elif plotType == 1:
+
+        elif self.plotType == 1:
         
             coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
             for chunk in coverageChunks:
@@ -399,8 +415,14 @@ class ChromoPlotWindow(QWidget):
                     val = minCov
                 #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
                 self.coverageData.append(2*val/normValue)
+                
+            #gives the centromere regions the value 2    
+            for pos in centromerePos:
+                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
+                    self.coverageData[index] = 2    
+
         
-            self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm)
+            self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm, picker=True)
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = self.coverageData
                 
@@ -420,9 +442,6 @@ class ChromoPlotWindow(QWidget):
         self.canvas.updateGeometry()
         self.canvas.draw()
 
-    
-        
-        
     def shadow(self, data, dupLimit, delLimit, intervalSize):
     
         #code for shadowing
@@ -439,7 +458,7 @@ class ChromoPlotWindow(QWidget):
                 xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
                 xCounterHighStart = xCounter
                 xCounterHighEnd = 0
-        
+
         xFillValuesLow = []
         xCounterLowStart = 0
         xCounterLowEnd = 0
@@ -452,9 +471,8 @@ class ChromoPlotWindow(QWidget):
             else:
                 xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
                 xCounterLowStart = xCounter
-                xCounterLowEnd = 0    
-                
-        #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
+                xCounterLowEnd = 0   
+    #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
         for values in xFillValuesLow:
             start = values[0]
             stop = values[1]
@@ -516,6 +534,14 @@ class ChromoPlotWindow(QWidget):
         
         return extendedData
         
+    def onpick(self, event):
+        if self.plotType == 0:
+            ind = event.ind
+            print(str(ind[0]) + " " + str(round(self.dataList[ind[0]],4)))
+        elif self.plotType == 1: 
+            ind = event.ind
+            print('onpick scatter:', ind, np.take(range(len(self.dataList)), ind), np.take(self.dataList, ind))
+    
     def on_key_press(self, event):
         key_press_handler(event, self.canvas, self.mpl_toolbar)
 
@@ -558,3 +584,5 @@ class ChromoPlotWindow(QWidget):
     def deletePlot(self):
         self.hide()
         self.parentWidget().removeChromoPlot(self)
+
+        
