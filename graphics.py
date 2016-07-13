@@ -9,7 +9,7 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 
 #The main window of the program. Handles a central view widget, and menus and toolbars.
-class WGSView(QMainWindow):
+class SciVisView(QMainWindow):
 
     def __init__(self):
         super().__init__()
@@ -19,7 +19,7 @@ class WGSView(QMainWindow):
         self.initmainwin()
 
     def initmainwin(self):
-        self.setWindowTitle('WGS')
+        self.setWindowTitle('SciVis')
         self.resize(QDesktopWidget().availableGeometry(self).size())
         #Center the main window on the user's screen
         frameGeo = self.frameGeometry()
@@ -54,7 +54,87 @@ class WGSView(QMainWindow):
         self.sceneTabs.currentChanged.connect(self.viewChanged)
         self.setCentralWidget(self.sceneTabs)
         self.views = []
+        self.initDock()
         self.show()
+
+    def initDock(self):
+        #Create a main dock widget to hold a tabbed widget (and possibly var view) in a vbox layout
+        self.mainDockContents = QWidget()
+        mainDockLayout = QVBoxLayout()
+        #Create a tab widget for chromosomes, data, settings, etc
+        self.dockTabs = QTabWidget()
+        self.dockTabs.currentChanged.connect(self.dockTabChanged)
+
+        #For each tab, create a page widget and collect views and buttons in a grid layout
+        chromosomePage = QWidget()
+        chromosomeLayout = QGridLayout()
+        dataPage = QWidget()
+        dataLayout = QGridLayout()
+        settingsPage = QWidget()
+        settingsLayout = QGridLayout()
+
+        #Get the chromosome model from active view? If no view?
+        #Apply layout to page, add page to tab widget
+        chromosomePage.setLayout(chromosomeLayout)
+        self.dockTabs.addTab(chromosomePage,"Chromosomes")
+
+        #Create data view and buttons
+        #Maybe use icons instead of default buttons? Resizing is clumsy with default buttons
+        dataList = QTreeView()
+        dataList.setModel(self.datasetModel)
+        dataList.setHeaderHidden(True)
+        dataList.setSelectionMode(QAbstractItemView.SingleSelection)
+        editButton = QPushButton('Edit set')
+        editButton.clicked.connect(lambda: self.editDataset(dataList.currentIndex()))
+        newButton = QPushButton('New set')
+        newButton.clicked.connect(self.createNewDataset)
+        loadButton = QPushButton('Load set')
+        loadButton.clicked.connect(self.loadDataset)
+        defaultFolderButton = QPushButton('Set default folder')
+        defaultFolderButton.clicked.connect(self.selectDefaultFolder)
+        dataLayout.addWidget(dataList,0,0,1,4)
+        dataLayout.addWidget(editButton,1,0,1,1)
+        dataLayout.addWidget(newButton,1,1,1,1)
+        dataLayout.addWidget(loadButton,1,2,1,1)
+        dataLayout.addWidget(defaultFolderButton,1,3,1,1)
+        #Apply layout to page, add page to tab widget
+        dataPage.setLayout(dataLayout)
+        tabIndex = self.dockTabs.addTab(dataPage,"Data")
+        #Start on data tab for now
+        self.dockTabs.setCurrentIndex(tabIndex)
+
+        #Get the settings model from active view? If no view?
+        #Apply layout to page, add page to tab widget
+        settingsPage.setLayout(settingsLayout)
+        self.dockTabs.addTab(settingsPage,"Settings")
+
+        #Add the tab widget to the main dock layout
+        mainDockLayout.addWidget(self.dockTabs)
+
+        #Create placeholder variant(?) widget
+        self.variantWidget = QWidget()
+        variantLayout = QGridLayout()
+        variantList = QTableView()
+        variantLayout.addWidget(variantList,0,0)
+        self.variantWidget.setLayout(variantLayout)
+        #Add variant widget to main dock layout
+        mainDockLayout.addWidget(self.variantWidget)
+
+        #Apply the main dock layout
+        self.mainDockContents.setLayout(mainDockLayout)
+        #Create the dock widget itself, set content to just created content widget, and add to main window
+        self.dockWidget = QDockWidget("Dock", self)
+        self.dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.dockWidget.setWidget(self.mainDockContents)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.dockWidget)
+
+        #Look at: setting title bar widget to empty widget.
+        #Non-closable / possiblity to open another if has been closed
+        #Tabs to even have, what should be default, maybe switch to immutable datasets (but var..)
+        #Scene tab names should be able to be set
+
+    def dockTabChanged(self):
+        pass
 
     #Exports anything in the current view as a png image
     def exportImage(self):
