@@ -3,6 +3,7 @@ from PySide.QtGui import *
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
+import math
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -338,7 +339,8 @@ class ChromoPlotWindow(QWidget):
         self.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.canvas.mpl_connect('draw_event', self.updateSetLimits)
         self.canvas.mpl_connect('button_release_event', self.onClick)
-        self.canvas.mpl_connect('pick_event', self.onpick)
+        #self.canvas.mpl_connect('pick_event', self.onpick)
+        #self.figure.canvas.mpl_connect('motion_notify_event', self._onMotion)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self.canvas)
@@ -358,6 +360,8 @@ class ChromoPlotWindow(QWidget):
         for cyto in self.cytoInfo:
             if cyto[0] == self.chromo.name and cyto[4] == 'acen':
                 centromerePos.append([int(cyto[1]), int(cyto[2])])
+                
+                
     
         #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
@@ -425,6 +429,10 @@ class ChromoPlotWindow(QWidget):
             self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm, picker=True)
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = self.coverageData
+            
+            self.dataX = range(len(self.coverageData))
+            self.dataY = self.coverageData
+            
                 
         #Create an input validator for the manual x range input boxes, range is no of bins
         self.xRangeValidator = QIntValidator(0,len(self.dataList),self)
@@ -533,14 +541,24 @@ class ChromoPlotWindow(QWidget):
                 extendedData.append(newDataMean[index])
         
         return extendedData
-        
-    def onpick(self, event):
-        if self.plotType == 0:
-            ind = event.ind
-            print(str(ind[0]) + " " + str(round(self.dataList[ind[0]],4)))
-        elif self.plotType == 1: 
-            ind = event.ind
-            print('onpick scatter:', ind, np.take(range(len(self.dataList)), ind), np.take(self.dataList, ind))
+
+    def _onMotion(self, event):
+        annotations = []
+        collisionFound = False
+        if event.xdata != None and event.ydata != None:
+            for i in self.dataX:
+                radius = 2
+                if abs(event.xdata - i) < radius and abs(event.ydata - self.dataY[i]) < 0.1:
+                    top = tip='x=%f\ny=%f\nX=%f\nY=%f' % (event.xdata, event.ydata, i, self.dataY[i])
+                    annote = self.ax.annotate(str(i) + " " + str(self.dataY[i]), xy= (i, self.dataY[i]))
+                    annotations.append(annote)
+                    collisionFound = True
+                    break
+            self.canvas.draw()        
+        if not collisionFound:
+            for i in range(len(annotations)):
+                annotations[i].set_visible(False)
+            self.canvas.draw()
     
     def on_key_press(self, event):
         key_press_handler(event, self.canvas, self.mpl_toolbar)
@@ -561,6 +579,8 @@ class ChromoPlotWindow(QWidget):
 
     #Opens a context menu on ctrl+right click on a plot
     def onClick(self, event):
+        self.clickX = event.xdata
+        self.clickY = event.ydata
         if event.button == 3 and event.key == 'control':
            menu = QMenu()
            self.clickX = event.xdata
@@ -584,5 +604,3 @@ class ChromoPlotWindow(QWidget):
     def deletePlot(self):
         self.hide()
         self.parentWidget().removeChromoPlot(self)
-
-        
