@@ -1,8 +1,8 @@
 from PySide.QtGui import QApplication
 import sys
-import graphics
+import mainwin
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    mainwin = graphics.SciVisView()
+    sciVisWindow = mainwin.SciVisView()
     sys.exit(app.exec_())

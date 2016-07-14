@@ -7,10 +7,10 @@ from PySide.QtGui import *
 
 class CircView(QGraphicsView):
 
-    def __init__(self,dataDict):
+    def __init__(self,dataDict,parent):
         self.type = "circ"
         self.scene = CircScene()
-        super().__init__(self.scene)
+        super().__init__(self.scene,parent)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
@@ -50,7 +50,6 @@ class CircView(QGraphicsView):
             self.chromoColors[chromo.name] = color
             color = color.darker(105)
         self.initscene()
-        self.showChInfo()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -170,6 +169,21 @@ class CircView(QGraphicsView):
         if item.row() == 7:
            self.showCentromereRegion = not self.showCentromereRegion
 
+    #Creates and returns a widget with this view's settings
+    def returnSettingsWidget(self):
+        settingsWidget = QWidget()
+        settingsLayout = QGridLayout()
+        settingsList = QTableView()
+        settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        settingsList.setShowGrid(False)
+        settingsList.horizontalHeader().hide()
+        settingsList.verticalHeader().hide()
+        settingsList.setModel(self.settingsModel)
+        settingsList.setTextElideMode(Qt.ElideNone)
+        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsWidget.setLayout(settingsLayout)
+        return settingsWidget
+
     #Sums the end bp for every chromosome with display toggled on
     def returnTotalDisplayedBP(self):
         totalDispBP = 0
@@ -262,6 +276,44 @@ class CircView(QGraphicsView):
         self.chDia.layout.addWidget(connButton,1,3,1,1)
         self.chDia.setMinimumSize(500,400)
         self.chDia.show()
+
+    def returnChromoInfoWidget(self):
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        #Button for toggling display of selected chromosomes in the scene
+        togButton = QPushButton(QIcon("icons/display.png"),"")
+        togButton.clicked.connect(self.toggleDisp)
+        togButton.setToolTip("Toggle display of chromosome")
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
+        viewVarButton.clicked.connect(self.viewVariants)
+        viewVarButton.setToolTip("View variants in chromosome")
+        #Button for adding variants
+        addVariantButton = QPushButton(QIcon("icons/new.png"),"")
+        addVariantButton.clicked.connect(self.addVariant)
+        addVariantButton.setToolTip("Add custom variant")
+        #Button for toggling connections
+        connButton = QPushButton(QIcon("icons/connections.png"),"")
+        connButton.clicked.connect(self.toggleConnections)
+        connButton.setToolTip("Toggle display of connections between variants")
+        chromoInfoLayout = QGridLayout()
+        chromoInfoLayout.addWidget(self.chList,0,0,1,4)
+        chromoInfoLayout.addWidget(togButton,1,0,1,1)
+        chromoInfoLayout.addWidget(connButton,1,1,1,1)
+        chromoInfoLayout.addWidget(viewVarButton,1,2,1,1)
+        chromoInfoLayout.addWidget(addVariantButton,1,3,1,1)
+        chromoWidget = QWidget()
+        chromoWidget.setLayout(chromoInfoLayout)
+        return chromoWidget
 
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):

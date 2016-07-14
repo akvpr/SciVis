@@ -13,8 +13,8 @@ from matplotlib.backends.backend_qt4agg import (
 
 class CoverageScrollArea(QScrollArea):
 
-    def __init__(self,dataDict):
-        super().__init__()
+    def __init__(self,dataDict,parent):
+        super().__init__(parent)
         self.type = "coverage"
         self.subview = CoverageView(dataDict)
         self.setWidget(self.subview)
@@ -22,6 +22,12 @@ class CoverageScrollArea(QScrollArea):
 
     def viewSettings(self):
         self.subview.viewSettings()
+
+    def returnSettingsWidget(self):
+        return self.subview.returnSettingsWidget()
+
+    def returnChromoInfoWidget(self):
+        return self.subview.returnChromoInfoWidget()
 
     def closeOpenWindows(self):
         try:
@@ -50,7 +56,6 @@ class CoverageView(QWidget):
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
-        self.showChInfo()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -167,6 +172,21 @@ class CoverageView(QWidget):
         if item.row() == 3:
             self.maxColumns = item.data(0)
 
+    #Creates and returns a widget with this view's settings
+    def returnSettingsWidget(self):
+        settingsWidget = QWidget()
+        settingsLayout = QGridLayout()
+        settingsList = QTableView()
+        settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        settingsList.setShowGrid(False)
+        settingsList.horizontalHeader().hide()
+        settingsList.verticalHeader().hide()
+        settingsList.setModel(self.settingsModel)
+        settingsList.setTextElideMode(Qt.ElideNone)
+        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsWidget.setLayout(settingsLayout)
+        return settingsWidget
+
     #Creates data model for info window
     def createChInfo(self):
         self.chModel = QStandardItemModel()
@@ -211,6 +231,34 @@ class CoverageView(QWidget):
         self.chDia.layout.addWidget(addVariantButton,1,1,1,1)
         self.chDia.setMinimumSize(450,400)
         self.chDia.show()
+
+    def returnChromoInfoWidget(self):
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
+        viewVarButton.clicked.connect(self.viewVariants)
+        viewVarButton.setToolTip("View variants in chromosome")
+        #Button for adding variants
+        addVariantButton = QPushButton(QIcon("icons/new.png"),"")
+        addVariantButton.clicked.connect(self.addVariant)
+        addVariantButton.setToolTip("Add custom variant")
+        chromoInfoLayout = QGridLayout()
+        chromoInfoLayout.addWidget(self.chList,0,0,1,2)
+        chromoInfoLayout.addWidget(viewVarButton,1,0,1,1)
+        chromoInfoLayout.addWidget(addVariantButton,1,1,1,1)
+        chromoWidget = QWidget()
+        chromoWidget.setLayout(chromoInfoLayout)
+        return chromoWidget
 
     #Creates data model for variants in given chromosome
     def createVariantInfo(self, chromo):
