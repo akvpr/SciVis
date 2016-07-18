@@ -391,8 +391,32 @@ class CircView(QGraphicsView):
             self.activeVariantTables[chromo.name] = varList
             viewVarDia.layout = QGridLayout(viewVarDia)
             viewVarDia.layout.addWidget(varList,0,0)
-            viewVarDia.layout.addWidget(varButton, 1, 0)
+            viewVarDia.layout.addWidget(varButton,1,0)
             viewVarDia.show()
+
+    def returnVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        self.createVariantInfo(chromo)
+        varList = QTableView()
+        #Create button for activation of variants
+        varButton = QPushButton('Toggle selected variant(s)')
+        varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
+        varList.setSortingEnabled(True)
+        varList.verticalHeader().hide()
+        varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        sourceModel = self.activeVariantModels[chromo.name]
+        proxyModel = VariantSortModel()
+        proxyModel.setSourceModel(sourceModel)
+        varList.setModel(proxyModel)
+        varList.resizeColumnToContents(1)
+        varList.resizeColumnToContents(2)
+        self.activeVariantTables[chromo.name] = varList
+        varLayout = QGridLayout()
+        varLayout.addWidget(varList,0,0)
+        varLayout.addWidget(varButton,1,0)
+        varWidget = QWidget()
+        varWidget.setLayout(varLayout)
+        return varWidget
 
     #Toggles individual variants on and off
     def toggleVariants(self, chromoName, chromoIndex):

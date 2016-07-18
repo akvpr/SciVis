@@ -79,7 +79,7 @@ class SciVisView(QMainWindow):
 
     def initDock(self):
         #Create a main dock widget to hold a tabbed widget (and possibly var view) in a vbox layout
-        self.mainDockContents = QWidget()
+        mainDockContents = QWidget()
         mainDockLayout = QVBoxLayout()
         #Create a tab widget for chromosomes, data
         self.dockTabs = QTabWidget()
@@ -131,20 +131,20 @@ class SciVisView(QMainWindow):
         mainDockLayout.addWidget(self.dockTabs)
 
         #Create placeholder variant widget
-        self.variantWidget = QWidget()
+        variantWidget = QWidget()
         variantLayout = QGridLayout()
         variantList = QTableView()
         variantLayout.addWidget(variantList,0,0)
-        self.variantWidget.setLayout(variantLayout)
+        variantWidget.setLayout(variantLayout)
         #Add variant widget to main dock layout
-        mainDockLayout.addWidget(self.variantWidget)
+        mainDockLayout.addWidget(variantWidget)
 
         #Apply the main dock layout
-        self.mainDockContents.setLayout(mainDockLayout)
+        mainDockContents.setLayout(mainDockLayout)
         #Create the dock widget itself, set content to just created content widget, and add to main window
         self.dockWidget = QDockWidget("Dock", self)
         self.dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.dockWidget.setWidget(self.mainDockContents)
+        self.dockWidget.setWidget(mainDockContents)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dockWidget)
 
         #Look at: setting title bar widget to empty widget.
@@ -406,18 +406,22 @@ class SciVisView(QMainWindow):
             self.lastActiveView.closeOpenWindows()
             self.removeToolBar(self.tools)
             self.tools.hide()
-            self.tools.destroy()
+            self.tools.deleteLater()
         except:
             pass
         self.lastActiveView = view
+        #Add this view's chromosome info widget
+        infoWidget = view.returnChromoInfoWidget()
+        #Connect selection of chromosome to update variant view
+        chTable = infoWidget.layout().itemAtPosition(0,0).widget()
+        chTable.clicked.connect(self.updateVariantView)
+        self.dockTabs.removeTab(0)
+        self.dockTabs.insertTab(0,infoWidget,"Chromosomes")
+        self.dockTabs.setCurrentIndex(0)
         #Add appropriate toolbar for scene type
         viewType = view.type
         if viewType == "circ":
             view.updateToggles()
-            curIndex = self.dockTabs.currentIndex()
-            self.dockTabs.removeTab(0)
-            self.dockTabs.insertTab(0,view.returnChromoInfoWidget(),"Chromosomes")
-            self.dockTabs.setCurrentIndex(0)
             self.tools = self.addToolBar('Circ tools')
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.showChInfo)
@@ -436,10 +440,6 @@ class SciVisView(QMainWindow):
             self.tools.addAction(self.importColorTabAct)
             self.tools.show()
         if viewType == "coverage":
-            curIndex = self.dockTabs.currentIndex()
-            self.dockTabs.removeTab(0)
-            self.dockTabs.insertTab(0,view.returnChromoInfoWidget(),"Chromosomes")
-            self.dockTabs.setCurrentIndex(0)
             self.tools = self.addToolBar('Coverage tools')
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.subview.showChInfo)
@@ -453,10 +453,6 @@ class SciVisView(QMainWindow):
             self.tools.show()
         if viewType == "karyogram":
             view.updateToggles()
-            curIndex = self.dockTabs.currentIndex()
-            self.dockTabs.removeTab(0)
-            self.dockTabs.insertTab(0,view.returnChromoInfoWidget(),"Chromosomes")
-            self.dockTabs.setCurrentIndex(0)
             self.tools = self.addToolBar('Karyogram tools')
             self.updateKaryogramAct = QAction('Update karyogram', self)
             self.updateKaryogramAct.triggered.connect(view.updateItems)
@@ -469,10 +465,6 @@ class SciVisView(QMainWindow):
             self.tools.addAction(self.updateKaryogramAct)
             self.tools.show()
         if viewType == "heatmap":
-            curIndex = self.dockTabs.currentIndex()
-            self.dockTabs.removeTab(0)
-            self.dockTabs.insertTab(0,view.returnChromoInfoWidget(),"Chromosomes")
-            self.dockTabs.setCurrentIndex(0)
             self.tools = self.addToolBar('Coverage tools')
             self.showChInfoAct = QAction('Chromosomes',self)
             self.showChInfoAct.triggered.connect(view.subview.showChInfo)
@@ -623,6 +615,17 @@ class SciVisView(QMainWindow):
         settingsDia.setLayout(settingsLayout)
         settingsDia.show()
 
-    #Should update settings only on apply, currently updates on item change.
+    #Should update settings only on apply (currently updates on item change and color pick).
     def updateSettings(self):
         pass
+
+    #Other views need appropriate function added, will restructure soon
+    def updateVariantView(self,index):
+        view = self.sceneTabs.currentWidget()
+        if view.type == 'circ':
+            selectedRow = index.row()
+            varWidget = view.returnVariantWidget(selectedRow)
+            oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
+            oldWidget.deleteLater()
+            self.dockWidget.widget().layout().insertWidget(1,varWidget)
+            self.update()
