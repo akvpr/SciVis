@@ -328,6 +328,8 @@ class HeatmapWindow(QWidget):
         #the bin size is in kb and needs therefore be multiplied by 1000
         self.binSize = binSize * 1000
         self.mapping = mapping
+        self.matrices = []
+        self.activeIndex = 0
         self.setMinimumSize(500,500)
         self.figure = Figure(figsize=(5,2),dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -343,87 +345,51 @@ class HeatmapWindow(QWidget):
         vbox.addWidget(self.mpl_toolbar)
         self.setLayout(vbox)
         self.ax = self.figure.add_subplot(111)
+        
+        xAxis = int(round(int(chromoA.end)/self.binSize,0))
+        yAxis = int(round(int(chromoB.end)/self.binSize,0))
+        
+        if not chromoA.connections:
+            chromoA.createConnections()
+        
+        A = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0)
+        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0]
+        self.matrices.append([A, matrixInfo])
+        self.updateHeatmap(self.activeIndex)
+        
+    def updateHeatmap(self, activeIndex):
 
-        if (self.mapping == "TLOC"):
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        
+        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[activeIndex][1]
+        if mapping == "TLOC":
             startString = "Position"
             endString = "Position"
-            #Creating connections, only create them if they haven't already
-            if not chromoA.connections:
-                chromoA.createConnections()
-            #Dividing the lengths of each chromosome by the bin size to get the axes
-            xAxis = int(round(int(chromoA.end)/self.binSize,0))
-            yAxis = int(round(int(chromoB.end)/self.binSize,0))
-            #Initializing an empty array, xAxis*yAxis
-            A=[[0 for j in range(yAxis)] for i in range(xAxis)]
-            #mapping the connections to elements in the array
-            for i in range(xAxis):
-                for j in range(yAxis):
-                    counter = 0
-                    for connection in chromoA.connections:
-                        #Only look at connections made to chromosome B
-                        if (connection[1] == chromoB.name):
-                            #takes the position in the middle of each window
-                            startWinA = int(connection[2].split(',')[0])
-                            endWinA = int(connection[2].split(',')[1])
-                            startWinB = int(connection[3].split(',')[0])
-                            endWinB = int(connection[3].split(',')[1])
-                            posConnA = (endWinA + startWinA)/2
-                            posConnB = (endWinB + startWinB)/2
-                            #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (posConnA >= i*self.binSize and posConnA < (i*self.binSize + self.binSize) and posConnB >= j*self.binSize and posConnB < (j*self.binSize + self.binSize)):
-                                counter = counter + 1
-                                A[i][j] = counter
-                    for connection in chromoB.connections:
-                        #Only look at connections made to chromosome A
-                        if (connection[1] == chromoA.name):
-                            #takes the position in the middle of each window
-                            startWinB = int(connection[2].split(',')[0])
-                            endWinB = int(connection[2].split(',')[1])
-                            startWinA = int(connection[3].split(',')[0])
-                            endWinA = int(connection[3].split(',')[1])
-                            posConnB = (endWinA + startWinA)/2
-                            posConnA = (endWinB + startWinB)/2
-                            #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (posConnA >= i*self.binSize and posConnA < (i*self.binSize + self.binSize) and posConnB >= j*self.binSize and posConnB < (j*self.binSize + self.binSize)):
-                                counter = counter + 1
-                                A[i][j] = counter
         else:
-            xAxis = int(round(int(chromoA.end)/self.binSize,0))
-            yAxis = int(round(int(chromoB.end)/self.binSize,0))
             startString = "Start position"
-            endString = "End position"
-            A=[[0 for j in range(yAxis)] for i in range(xAxis)]
-            for i in range(xAxis):
-                for j in range(yAxis):
-                    counter = 0
-                    for variant in chromoA.variants:
-                        #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
-                       if (variant[4]==self.mapping):
-                            start = int(variant[1])
-                            end = int(variant[3])
-                            pos = (end + start)/2
-                            #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (start >= i*self.binSize and start < (i*self.binSize + self.binSize) and end >= j*self.binSize and end < (j*self.binSize + self.binSize)):
-                                counter = counter + 1
-                                A[i][j] = counter
-
-
-        #convert the list A to a numpy array for using the function .T (to make transpose of)
-        A = np.asarray(A)
-        #use imshow to smooth the edges with interpolation, (does not work 100%)
-        #heatmap = self.ax.imshow(A.T, cmap=plt.cm.coolwarm, interpolation='bilinear', aspect='auto', extent=[0,xAxis,0,yAxis])
-        self.heatmap = self.ax.pcolormesh(A.T, cmap = plt.cm.coolwarm)
-        #create a colorbar
+            endString = "End position"        
+        
+        self.heatmap = self.ax.pcolormesh(self.matrices[activeIndex][0].T, cmap = plt.cm.coolwarm)
         colorbar = self.figure.colorbar(self.heatmap)
         colorbar.set_label("# of interactions")
-        #set the limits of each axis as well as their labels
-        self.ax.set_xlim(0,xAxis)
-        self.ax.set_ylim(0,yAxis)
-        self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[self.mapping] + ")")
-        self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize) + "kb)")
-        self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize) + "kb)")
 
-        self.canvas.updateGeometry()
+        self.ax.set_xlim(0, xAxis)
+        self.ax.set_ylim(0, yAxis)
+        xlabels = []
+        ylabels = []
+        for i in range(xAxis):
+            if i%2:
+                xlabels.append(str(i*zoomFactor + xAxisStart))
+                ylabels.append(str(i*zoomFactor + yAxisStart))
+        self.ax.set_xticks(range(0,xAxis,2))
+        self.ax.set_yticks(range(0,yAxis,2))
+        self.ax.set_xticklabels(xlabels)
+        self.ax.set_yticklabels(ylabels)
+        self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
+        self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize/1000) + "kb)")
+        self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize/1000) + "kb)")
+        
         self.canvas.draw()
 
     def deletePlot(self):
@@ -432,7 +398,7 @@ class HeatmapWindow(QWidget):
 
     #Opens a context menu on ctrl+right click on a plot
     def onClick(self, event):
-        if event.button == 3 and event.key == 'control':
+        if event.button == 3:
            menu = QMenu()
            self.clickX = event.xdata
            self.clickY = event.ydata
@@ -454,30 +420,15 @@ class HeatmapWindow(QWidget):
         if ok and text:
             self.ax.text(self.clickX, self.clickY, text)
             self.canvas.draw()
-            
-    def zoomIn(self):
-        #xAxis = int(int(self.clickX)/10)
-        #yAxis = int(int(self.clickY/10)
-        
-        xStart = int(self.clickX)
-        yStart = int(self.clickY)
-        
-        print(xStart)
-        print(yStart)
-        
-        xAxis = 10
-        yAxis = 10
+    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart):
         B=[[0 for j in range(yAxis)] for i in range(xAxis)]
-        
-        if (self.mapping == "TLOC"):
-        
-            
+        if (mapping == "TLOC"): 
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
-                    for connection in self.chromoA.connections:
+                    for connection in chromoA.connections:
                         #Only look at connections made to chromosome B
-                        if (connection[1] == self.chromoB.name):
+                        if (connection[1] == chromoB.name):
                             #takes the position in the middle of each window
                             startWinA = int(connection[2].split(',')[0])
                             endWinA = int(connection[2].split(',')[1])
@@ -486,14 +437,13 @@ class HeatmapWindow(QWidget):
                             posConnA = (endWinA + startWinA)/2
                             posConnB = (endWinB + startWinB)/2
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (posConnA >= (xStart*self.binSize + i*(self.binSize/10)) and posConnA < (xStart*self.binSize + i*self.binSize/10 + self.binSize/10) and posConnB >= (yStart*self.binSize + j*self.binSize/10) and posConnB < (yStart*self.binSize + j*self.binSize/10 + self.binSize/10)):
+                            if (posConnA >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and posConnA < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and posConnB >= (yAxisStart*binSize + j*binSize*zoomFactor) and posConnB < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
                                 #print((xStart*self.binSize + i*(self.binSize/10)), (xStart*self.binSize + i*self.binSize/10 + self.binSize/10), (yStart*self.binSize + j*self.binSize/10), (yStart*self.binSize + j*self.binSize + self.binSize/10))
                                 #print(posConnA, posConnB)
                                 #print(i, j)
                                 B[i][j] = counter
         else:
-        
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
@@ -503,35 +453,49 @@ class HeatmapWindow(QWidget):
                             start = int(variant[1])
                             end = int(variant[3])
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (start >= (xStart*self.binSize + i*(self.binSize/10)) and start < (xStart*self.binSize + i*self.binSize/10 + self.binSize/10) and end >= (yStart*self.binSize + j*self.binSize/10) and end < (yStart*self.binSize + j*self.binSize/10 + self.binSize/10)):
+                            if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
                                 B[i][j] = counter
-                            
         B = np.asarray(B)
-        #self.ax.clear()
-        self.figure.clear()
-        self.ax = self.figure.add_subplot(111)
-        self.heatmap = self.ax.pcolormesh(B.T, cmap = plt.cm.coolwarm)
-        colorbar = self.figure.colorbar(self.heatmap)
-        colorbar.set_label("# of interactions")
+        return B
+    
+    def zoomIn(self):
         
-        self.canvas.updateGeometry()
-        self.canvas.draw()
+        B = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY))
+        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY)]
+        if self.activeIndex < len(self.matrices)-1:
+            print("len: " + str(len(self.matrices)))
+            for index in range(0,len(self.matrices)-1):
+                print(index)
+                self.matrices.pop()
+        self.matrices.append([B, matrixInfo])
+        self.activeIndex += 1
+        self.updateHeatmap(self.activeIndex)
         
     def setColorBar(self):
         return 0
             
 class MplToolbar(NavigationToolbar):
-    def __init__(self, canvas_, parent_):
 
-        self.toolitems = (
-            ('Home', 'Reset original view', 'home', 'home'),
-            ('Back', 'Back to previous view', 'back', 'back'),
-            ('Forward', 'Forward to next view', 'forward', 'forward'),
-            (None, None, None, None),
-            ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
-            ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
-            (None, None, None, None),
-            ('Save', 'Save the current image', 'filesave', 'save_figure'),
-            )
-        NavigationToolbar.__init__(self, canvas_, parent_)
+    toolitems = [t for t in NavigationToolbar.toolitems if
+                 t[0] in ("Back", "Forward" )]
+
+    def __init__(self ,*args, **kwargs):
+        super(MplToolbar, self).__init__(*args, **kwargs)
+        self.layout().takeAt(2) 
+        
+    def back(self):
+        if self.parentWidget().activeIndex > 0:
+            self.parentWidget().activeIndex -= 1
+            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
+        self.mode = "go back"
+        self.set_message(self.mode)    
+        print(self.parentWidget().activeIndex)
+        
+    def forward(self):
+        if self.parentWidget().activeIndex < len(self.parentWidget().matrices)-1:
+            self.parentWidget().activeIndex += 1
+            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
+        self.mode = "go forward"
+        self.set_message(self.mode)
+        print(self.parentWidget().activeIndex)
