@@ -3,6 +3,7 @@ from PySide.QtGui import *
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
+import math
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -38,12 +39,13 @@ class CoverageView(QWidget):
         super().__init__()
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.cytoInfo = self.dataDict['cytoTab']
         self.subWindows = []
         self.grid = QGridLayout()
         self.setLayout(self.grid)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.maxColumns = 2
-        self.bpWindow = 50
+        self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
         self.createSettings()
@@ -78,7 +80,7 @@ class CoverageView(QWidget):
         choice = addDialog.exec_()
         if choice == QDialog.Accepted:
             chromo = self.chromosomes[chromoBox.currentIndex()]
-            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(),self)
+            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(), self.cytoInfo,self)
             self.subWindows.append(chromoPlot)
             self.arrangePlots()
 
@@ -313,9 +315,11 @@ class CoverageView(QWidget):
 #Widget containing a pyplot, plotting coverage data from given chromosome
 class ChromoPlotWindow(QWidget):
 
-    def __init__(self,chromo,plotType,parent):
+    def __init__(self,chromo,plotType, cytoInfo,parent):
         super().__init__(parent)
         self.chromo = chromo
+        self.plotType = plotType
+        self.cytoInfo = cytoInfo
         self.setMinimumSize(500,500)
         self.figure = Figure(figsize=(5,2),dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -335,6 +339,8 @@ class ChromoPlotWindow(QWidget):
         self.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.canvas.mpl_connect('draw_event', self.updateSetLimits)
         self.canvas.mpl_connect('button_release_event', self.onClick)
+        #self.canvas.mpl_connect('pick_event', self.onpick)
+        #self.figure.canvas.mpl_connect('motion_notify_event', self._onMotion)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self.canvas)
@@ -345,48 +351,215 @@ class ChromoPlotWindow(QWidget):
         normValue = self.parentWidget().coverageNorm
         minCov = normValue*self.parentWidget().minCoverage
         maxCov = normValue*self.parentWidget().maxCoverage
-        coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
+        dupLimit = 2.25
+        delLimit = 1.75
         self.coverageData = []
-        for chunk in coverageChunks:
-            val = sum(chunk) / len(chunk)
-            if val > maxCov:
-                val = maxCov
-            if val < minCov:
-                val = minCov
-            #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
-            self.coverageData.append(2*val/normValue)
-
-        #Maps colors to coverage values as follows: red: [0,0.75], blue: [0.75,1.25], green: [1.25,5]
+        
+        #Identifies centromere regions according to the cytoTab file
+        centromerePos = []
+        for cyto in self.cytoInfo:
+            if cyto[0] == self.chromo.name and cyto[4] == 'acen':
+                centromerePos.append([int(cyto[1]), int(cyto[2])])
+                
+                
+    
+        #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
-        colorNorm = BoundaryNorm([1, 1.75, 2.25, 10], 3)
-        #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-        points = np.array([range(len(self.coverageData)), self.coverageData]).T.reshape(-1, 1, 2)
-        segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        #converting the coverageData list into a numpy array needed for the LineCollection
-        numpyArrayCData = np.array(self.coverageData)
-        lc = LineCollection(segments, cmap=colorMap, norm=colorNorm)
-        lc.set_array(numpyArrayCData)
-        if plotType == 0:
-            self.ax.add_collection(lc)
-        elif plotType == 1:
-            self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm)
+        colorNorm = BoundaryNorm([0, delLimit, dupLimit, 10], 3)
 
+        if self.plotType == 0:
+        
+            coverageChunks = [chromo.coverage[i:i+(self.parentWidget().bpWindow*10)] for i in range(0,len(chromo.coverage),(self.parentWidget().bpWindow*10))]
+            for chunk in coverageChunks:
+                val = sum(chunk) / len(chunk)
+                if val > maxCov:
+                    val = maxCov
+                if val < minCov:
+                    val = minCov
+                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
+                self.coverageData.append(2*val/normValue)
+        
+            #Adding more data points in order to get make shorter segments for a more accurate coloring
+            #the goal is to get 10 times more data points, this is not precisely achieved. With resolution 100kb we get 9,964x, 10kb -> 9,9964x, 1kb -> 9,9996x
+            extendedData = self.getMean(self.coverageData)
+            
+            #gives centromere regions the value 2
+            for pos in centromerePos:
+                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
+                    extendedData[index] = 2
+            
+            #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
+            #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
+            #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
+            #Each segment is assigned the starting coverage value i.e. y1
+            #The segments are then joined together to a "line collection" and are colored according to the colorMap and colorNorm.
+            #A y1 value below 1.75 -> red color, a y1 value between 1.75 and 2.25 -> black and y1 > 2.25 -> green
+            points = np.array([range(len(extendedData)), extendedData]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            
+            #converting the coverageData list into a numpy array needed for the LineCollection
+            numpyArrayCData = np.array(extendedData)
+            lc = LineCollection(segments, cmap=colorMap, norm=colorNorm, pickradius=10)
+            lc.set_array(numpyArrayCData)
+            lc.set_picker(True)
+            self.ax.add_collection(lc)
+            intervalSize = 10
+            self.shadow(extendedData,dupLimit,delLimit,intervalSize)  
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
+            self.dataList = extendedData    
+
+        elif self.plotType == 1:
+        
+            coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
+            for chunk in coverageChunks:
+                val = sum(chunk) / len(chunk)
+                if val > maxCov:
+                    val = maxCov
+                if val < minCov:
+                    val = minCov
+                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
+                self.coverageData.append(2*val/normValue)
+                
+            #gives the centromere regions the value 2    
+            for pos in centromerePos:
+                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
+                    self.coverageData[index] = 2    
+
+        
+            self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm, picker=True)
+            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
+            self.dataList = self.coverageData
+            
+            self.dataX = range(len(self.coverageData))
+            self.dataY = self.coverageData
+            
+                
         #Create an input validator for the manual x range input boxes, range is no of bins
-        self.xRangeValidator = QIntValidator(0,len(self.coverageData),self)
+        self.xRangeValidator = QIntValidator(0,len(self.dataList),self)
         self.minXSet.setValidator(self.xRangeValidator)
         self.maxXSet.setValidator(self.xRangeValidator)
         self.minXSet.setText("0")
-        self.maxXSet.setText(str(len(self.coverageData)))
+        self.maxXSet.setText(str(len(self.dataList)))
         self.minXSet.returnPressed.connect(self.updateXRange)
         self.maxXSet.returnPressed.connect(self.updateXRange)
-        self.ax.set_xlim(0,len(self.coverageData))
+        self.ax.set_xlim(0,len(self.dataList))
         self.ax.set_ylim(minCov/normValue,maxCov/normValue)
         self.ax.set_title("Contig " + chromo.name)
-        self.ax.set_xlabel("Position (x" + str(self.parentWidget().bpWindow) + " kb)")
+        self.ax.set_xlabel(xLabelText)
         self.ax.set_ylabel("Coverage")
         self.canvas.updateGeometry()
         self.canvas.draw()
 
+    def shadow(self, data, dupLimit, delLimit, intervalSize):
+    
+        #code for shadowing
+        xFillValuesHigh = []
+        xCounterHighStart = 0
+        xCounterHighEnd = 0
+        xCounter = 0
+        #Collecting consecutive points in intervals where the coverage is above dupLimit
+        for y_value in data:
+            xCounter += 1
+            if y_value > dupLimit:
+                xCounterHighEnd += 1
+            else:
+                xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
+                xCounterHighStart = xCounter
+                xCounterHighEnd = 0
+
+        xFillValuesLow = []
+        xCounterLowStart = 0
+        xCounterLowEnd = 0
+        xCounter = 0
+        #Collecting consecutive points in intervals where the coverage is below delLimit
+        for y_value in data:
+            xCounter += 1
+            if y_value < delLimit:
+                xCounterLowEnd += 1
+            else:
+                xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
+                xCounterLowStart = xCounter
+                xCounterLowEnd = 0   
+    #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
+        for values in xFillValuesLow:
+            start = values[0]
+            stop = values[1]
+            if (stop - start) > intervalSize:
+                self.ax.fill_between(range(start, stop), delLimit, data[start:stop], facecolor='r', interpolate=True, edgecolor = 'r')               
+        for values in xFillValuesHigh:
+            start = values[0]
+            stop = values[1]
+            if (stop - start) > intervalSize:
+                self.ax.fill_between(range(start, stop), dupLimit, data[start:stop], facecolor='g', interpolate = True, edgecolor = 'g')
+        
+    def getMean(self, data):
+        
+        #the goal of this function is to increase the amount of data points 10 times
+        #to achieve this the mean is taken between two adjacent data points and added to a new list along with the old data points
+        #example: [5, 10, 15, 20] -> [5, 7.5, 10, 12.5, 15, 17.5, 20]
+        #this is done three times
+        newData = []
+        newDataTemp = []
+        newDataMean = []
+        extendedData = []
+        
+        #if data has x data points, newData will have 2x-1
+        for index in range(len(data)):   
+            if index < len(data)-1:
+                newData.append(data[index])
+                newData.append((data[index] + data[index+1])/2)
+            else:
+                newData.append(data[index])  
+        
+        #if data has x data points, newDataTemp will have 2*(2x-1)-1 = 4x-3
+        for index in range(len(newData)):   
+            if index < len(newData)-1:
+                newDataTemp.append(newData[index])
+                newDataTemp.append((newData[index] + newData[index+1])/2)
+            else:
+                newDataTemp.append(newData[index])   
+        
+        #if data has x data points, newDataMean will have 2*(2*(2x-1)-1)-1 = 2*(4x-3)-1 = 8x-7
+        for index in range(len(newDataTemp)):   
+            if index < len(newDataTemp)-1:
+                newDataMean.append(newDataTemp[index])
+                newDataMean.append((newDataTemp[index] + newDataTemp[index+1])/2)
+            else:
+                newDataMean.append(newDataTemp[index]) 
+                
+        #if data has x data points then, in order to get 10x data points we need to add 2x+7 to 8x-7
+        #this is done by taking the mean 2x+7 times and spacing these out evenly. 
+        oldLength = len(data)
+        newLength = len(newDataMean)
+        spacing = round((newLength / ((2*oldLength)+7)),0)
+
+        for index in range(len(newDataMean)):
+            if index%spacing == 0 and index < len(newDataMean)-1:
+                extendedData.append(newDataMean[index])
+                extendedData.append((newDataMean[index] + newDataMean[index+1])/2)
+            else:
+                extendedData.append(newDataMean[index])
+        
+        return extendedData
+
+    def _onMotion(self, event):
+        annotations = []
+        collisionFound = False
+        if event.xdata != None and event.ydata != None:
+            for i in self.dataX:
+                radius = 2
+                if abs(event.xdata - i) < radius and abs(event.ydata - self.dataY[i]) < 0.1:
+                    top = tip='x=%f\ny=%f\nX=%f\nY=%f' % (event.xdata, event.ydata, i, self.dataY[i])
+                    annote = self.ax.annotate(str(i) + " " + str(self.dataY[i]), xy= (i, self.dataY[i]))
+                    annotations.append(annote)
+                    collisionFound = True
+                    break
+            self.canvas.draw()        
+        if not collisionFound:
+            for i in range(len(annotations)):
+                annotations[i].set_visible(False)
+            self.canvas.draw()
+    
     def on_key_press(self, event):
         key_press_handler(event, self.canvas, self.mpl_toolbar)
 
@@ -398,14 +571,16 @@ class ChromoPlotWindow(QWidget):
         xmin,xmax = self.ax.get_xlim()
         if xmin < 0:
             xmin = 0
-        if xmax > len(self.coverageData):
-            xmax = len(self.coverageData)
+        if xmax > len(self.dataList):
+            xmax = len(self.dataList)
         self.ax.set_xlim(xmin,xmax)
         self.minXSet.setText(str(int(xmin)))
         self.maxXSet.setText(str(int(xmax)))
 
     #Opens a context menu on ctrl+right click on a plot
     def onClick(self, event):
+        self.clickX = event.xdata
+        self.clickY = event.ydata
         if event.button == 3 and event.key == 'control':
            menu = QMenu()
            self.clickX = event.xdata
