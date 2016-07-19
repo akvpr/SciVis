@@ -328,6 +328,8 @@ class HeatmapWindow(QWidget):
         #the bin size is in kb and needs therefore be multiplied by 1000
         self.binSize = binSize * 1000
         self.mapping = mapping
+        self.matrices = []
+        self.activeIndex = 0
         self.setMinimumSize(500,500)
         self.figure = Figure(figsize=(5,2),dpi=100)
         self.canvas = FigureCanvas(self.figure)
@@ -335,25 +337,92 @@ class HeatmapWindow(QWidget):
         self.canvas.setFocusPolicy( Qt.ClickFocus )
         self.canvas.setFocus()
 
+        self.mpl_toolbar = MplToolbar(self.canvas, self)
         self.canvas.mpl_connect('button_release_event', self.onClick)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self.canvas)
+        vbox.addWidget(self.mpl_toolbar)
         self.setLayout(vbox)
         self.ax = self.figure.add_subplot(111)
+        
+        xAxis = int(round(int(chromoA.end)/self.binSize,0))
+        yAxis = int(round(int(chromoB.end)/self.binSize,0))
+        
+        if not chromoA.connections:
+            chromoA.createConnections()
+        
+        A = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0)
+        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0]
+        self.matrices.append([A, matrixInfo])
+        self.updateHeatmap(self.activeIndex)
+        
+    def updateHeatmap(self, activeIndex):
 
-        if (self.mapping == "TLOC"):
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
+        
+        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[activeIndex][1]
+        if mapping == "TLOC":
             startString = "Position"
             endString = "Position"
-            #Creating connections, only create them if they haven't already
-            if not chromoA.connections:
-                chromoA.createConnections()
-            #Dividing the lengths of each chromosome by the bin size to get the axes
-            xAxis = int(round(int(chromoA.end)/self.binSize,0))
-            yAxis = int(round(int(chromoB.end)/self.binSize,0))
-            #Initializing an empty array, xAxis*yAxis
-            A=[[0 for j in range(yAxis)] for i in range(xAxis)]
-            #mapping the connections to elements in the array
+        else:
+            startString = "Start position"
+            endString = "End position"        
+        
+        self.heatmap = self.ax.pcolormesh(self.matrices[activeIndex][0].T, cmap = plt.cm.coolwarm)
+        colorbar = self.figure.colorbar(self.heatmap)
+        colorbar.set_label("# of interactions")
+
+        self.ax.set_xlim(0, xAxis)
+        self.ax.set_ylim(0, yAxis)
+        xlabels = []
+        ylabels = []
+        for i in range(xAxis):
+            if i%2:
+                xlabels.append(str(i*zoomFactor + xAxisStart))
+                ylabels.append(str(i*zoomFactor + yAxisStart))
+        self.ax.set_xticks(range(0,xAxis,2))
+        self.ax.set_yticks(range(0,yAxis,2))
+        self.ax.set_xticklabels(xlabels)
+        self.ax.set_yticklabels(ylabels)
+        self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
+        self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize/1000) + "kb)")
+        self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize/1000) + "kb)")
+        
+        self.canvas.draw()
+
+    def deletePlot(self):
+        self.hide()
+        self.parentWidget().removeHeatmap(self)
+
+    #Opens a context menu on ctrl+right click on a plot
+    def onClick(self, event):
+        if event.button == 3:
+           menu = QMenu()
+           self.clickX = event.xdata
+           self.clickY = event.ydata
+           addPlotTextAct = QAction('Insert text',self)
+           addPlotTextAct.triggered.connect(self.addPlotText)
+           deletePlotAct = QAction('Delete plot',self)
+           deletePlotAct.triggered.connect(self.deletePlot)
+           zoomInAct = QAction('Zoom in on rectangle', self)
+           zoomInAct.triggered.connect(self.zoomIn)
+           menu.addAction(addPlotTextAct)
+           menu.addAction(deletePlotAct)
+           menu.addAction(zoomInAct)
+           canvasHeight = int(self.figure.get_figheight()*self.figure.dpi)
+           menu.exec_(self.mapToGlobal(QPoint(event.x,canvasHeight-event.y)))
+
+    #Adds a given text to the clicked location (in data coordinates) to the plot
+    def addPlotText(self):
+        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
+        if ok and text:
+            self.ax.text(self.clickX, self.clickY, text)
+            self.canvas.draw()
+    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart):
+        B=[[0 for j in range(yAxis)] for i in range(xAxis)]
+        if (mapping == "TLOC"): 
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
@@ -368,70 +437,65 @@ class HeatmapWindow(QWidget):
                             posConnA = (endWinA + startWinA)/2
                             posConnB = (endWinB + startWinB)/2
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (posConnA >= i*self.binSize and posConnA < (i*self.binSize + self.binSize) and posConnB >= j*self.binSize and posConnB < (j*self.binSize + self.binSize)):
+                            if (posConnA >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and posConnA < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and posConnB >= (yAxisStart*binSize + j*binSize*zoomFactor) and posConnB < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
-                                A[i][j] = counter
+                                #print((xStart*self.binSize + i*(self.binSize/10)), (xStart*self.binSize + i*self.binSize/10 + self.binSize/10), (yStart*self.binSize + j*self.binSize/10), (yStart*self.binSize + j*self.binSize + self.binSize/10))
+                                #print(posConnA, posConnB)
+                                #print(i, j)
+                                B[i][j] = counter
         else:
-            xAxis = int(round(int(chromoA.end)/self.binSize,0))
-            yAxis = int(round(int(chromoB.end)/self.binSize,0))
-            startString = "Start position"
-            endString = "End position"
-            A=[[0 for j in range(yAxis)] for i in range(xAxis)]
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
-                    for variant in chromoA.variants:
-                        #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
-                       if (variant[1]==self.mapping):
-                            start = int(variant[0])
+                    for variant in self.chromoA.variants:
+                       #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
+                       if (variant[4]==self.mapping):
+                            start = int(variant[1])
                             end = int(variant[3])
-                            pos = (end + start)/2
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (start >= i*self.binSize and start < (i*self.binSize + self.binSize) and end >= j*self.binSize and end < (j*self.binSize + self.binSize)):
+                            if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
-                                A[i][j] = counter
+                                B[i][j] = counter
+        B = np.asarray(B)
+        return B
+    
+    def zoomIn(self):
+        
+        B = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY))
+        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY)]
+        if self.activeIndex < len(self.matrices)-1:
+            print("len: " + str(len(self.matrices)))
+            for index in range(0,len(self.matrices)-1):
+                print(index)
+                self.matrices.pop()
+        self.matrices.append([B, matrixInfo])
+        self.activeIndex += 1
+        self.updateHeatmap(self.activeIndex)
+        
+    def setColorBar(self):
+        return 0
+            
+class MplToolbar(NavigationToolbar):
 
+    toolitems = [t for t in NavigationToolbar.toolitems if
+                 t[0] in ("Back", "Forward" )]
 
-        #convert the list A to a numpy array for using the function .T (to make transpose of)
-        A = np.asarray(A)
-        #use imshow to smooth the edges with interpolation, (does not work 100%)
-        #heatmap = self.ax.imshow(A, cmap=plt.cm.coolwarm, interpolation='bilinear', aspect='auto', extent=[0,xAxis,0,yAxis])
-        heatmap = self.ax.pcolormesh(A.T, cmap = plt.cm.coolwarm)
-        #create a colorbar
-        colorbar = self.figure.colorbar(heatmap)
-        colorbar.set_label("# of interactions")
-        #set the limits of each axis as well as their labels
-        self.ax.set_xlim(0,xAxis)
-        self.ax.set_ylim(0,yAxis)
-        self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[self.mapping] + ")")
-        self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize) + "kb)")
-        self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize) + "kb)")
-
-        self.canvas.updateGeometry()
-        self.canvas.draw()
-
-    def deletePlot(self):
-        self.hide()
-        self.parentWidget().removeHeatmap(self)
-
-    #Opens a context menu on ctrl+right click on a plot
-    def onClick(self, event):
-        if event.button == 3 and event.key == 'control':
-           menu = QMenu()
-           self.clickX = event.xdata
-           self.clickY = event.ydata
-           addPlotTextAct = QAction('Insert text',self)
-           addPlotTextAct.triggered.connect(self.addPlotText)
-           deletePlotAct = QAction('Delete plot',self)
-           deletePlotAct.triggered.connect(self.deletePlot)
-           menu.addAction(addPlotTextAct)
-           menu.addAction(deletePlotAct)
-           canvasHeight = int(self.figure.get_figheight()*self.figure.dpi)
-           menu.exec_(self.mapToGlobal(QPoint(event.x,canvasHeight-event.y)))
-
-    #Adds a given text to the clicked location (in data coordinates) to the plot
-    def addPlotText(self):
-        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
-        if ok and text:
-            self.ax.text(self.clickX, self.clickY, text)
-            self.canvas.draw()
+    def __init__(self ,*args, **kwargs):
+        super(MplToolbar, self).__init__(*args, **kwargs)
+        self.layout().takeAt(2) 
+        
+    def back(self):
+        if self.parentWidget().activeIndex > 0:
+            self.parentWidget().activeIndex -= 1
+            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
+        self.mode = "go back"
+        self.set_message(self.mode)    
+        print(self.parentWidget().activeIndex)
+        
+    def forward(self):
+        if self.parentWidget().activeIndex < len(self.parentWidget().matrices)-1:
+            self.parentWidget().activeIndex += 1
+            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
+        self.mode = "go forward"
+        self.set_message(self.mode)
+        print(self.parentWidget().activeIndex)
