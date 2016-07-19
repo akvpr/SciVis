@@ -9,7 +9,7 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 
 #The main window of the program. Handles a central view widget, and menus and toolbars.
-class WGSView(QMainWindow):
+class SciVisView(QMainWindow):
 
     def __init__(self):
         super().__init__()
@@ -19,7 +19,7 @@ class WGSView(QMainWindow):
         self.initmainwin()
 
     def initmainwin(self):
-        self.setWindowTitle('WGS')
+        self.setWindowTitle('SciVis')
         self.resize(QDesktopWidget().availableGeometry(self).size())
         #Center the main window on the user's screen
         frameGeo = self.frameGeometry()
@@ -28,6 +28,15 @@ class WGSView(QMainWindow):
         self.move(frameGeo.topLeft())
         #Adds a status bar to the main window
         self.statusBar()
+        #Load various icons as QIcons
+        self.deleteIcon = QIcon("icons/delete.png")
+        self.editIcon = QIcon("icons/edit.png")
+        self.exportImageIcon = QIcon("icons/exportimage.png")
+        self.folderIcon = QIcon("icons/folder.png")
+        self.loadIcon = QIcon("icons/load.png")
+        self.newIcon = QIcon("icons/new.png")
+        self.saveIcon = QIcon("icons/save.png")
+        self.settingsIcon = QIcon("icons/settings.png")
         #Create actions for menus and toolbars, connect to functions
         self.newCircAct = QAction('New circular diagram',self)
         self.newCircAct.triggered.connect(self.newCirc)
@@ -45,33 +54,124 @@ class WGSView(QMainWindow):
         self.viewDatasetsAct.triggered.connect(self.viewDatasets)
         self.saveDatasetAct = QAction('Save dataset',self)
         self.saveDatasetAct.triggered.connect(self.saveDataset)
+        self.viewSettingsAct = QAction('Settings',self)
+        self.viewSettingsAct.triggered.connect(self.viewSettings)
         #Create menus, and add actions
+        self.createColorModel()
         self.menubar = self.menuBar()
         self.fileMenu = self.menubar.addMenu('File')
-        self.addMenuItems()
+        self.fileMenu.addAction(self.newCircAct)
+        self.fileMenu.addAction(self.newCovDiagramAct)
+        self.fileMenu.addAction(self.newKaryogramAct)
+        self.fileMenu.addAction(self.newHeatmapAct)
+        self.fileMenu.addAction(self.viewDatasetsAct)
+        self.fileMenu.addAction(self.saveDatasetAct)
+        self.fileMenu.addAction(self.viewSettingsAct)
+        self.fileMenu.addAction(self.exportImageAct)
+        self.fileMenu.addAction(self.exitAct)
         #Create a tab widget handling active scenes
         self.sceneTabs = QTabWidget(self)
         self.sceneTabs.currentChanged.connect(self.viewChanged)
         self.setCentralWidget(self.sceneTabs)
         self.views = []
+        self.initDock()
         self.show()
+
+    def initDock(self):
+        #Create a main dock widget to hold a tabbed widget (and possibly var view) in a vbox layout
+        mainDockContents = QWidget()
+        mainDockLayout = QVBoxLayout()
+        #Create a tab widget for chromosomes, data
+        self.dockTabs = QTabWidget()
+        self.dockTabs.currentChanged.connect(self.dockTabChanged)
+        #For each tab, create a page widget and collect views and buttons in a grid layout
+        chromosomePage = QWidget()
+        chromosomeLayout = QGridLayout()
+        dataPage = QWidget()
+        dataLayout = QGridLayout()
+
+        #Placeholder for chromosome info in active view
+        #Apply layout to page, add page to tab widget
+        chromosomePage.setLayout(chromosomeLayout)
+        self.dockTabs.addTab(chromosomePage,"Chromosomes")
+
+        #Create data view and buttons
+        dataList = QTreeView()
+        dataList.setModel(self.datasetModel)
+        dataList.setHeaderHidden(True)
+        dataList.setSelectionMode(QAbstractItemView.SingleSelection)
+        newButton = QPushButton(self.newIcon,"")
+        newButton.setToolTip("Create new dataset")
+        newButton.clicked.connect(self.createNewDataset)
+        editButton = QPushButton(self.editIcon,"")
+        editButton.setToolTip("Edit dataset")
+        editButton.clicked.connect(lambda: self.editDataset(dataList.currentIndex()))
+        loadButton = QPushButton(self.loadIcon,"")
+        loadButton.setToolTip("Load dataset")
+        loadButton.clicked.connect(self.loadDataset)
+        saveButton = QPushButton(self.saveIcon,"")
+        saveButton.setToolTip("Save dataset")
+        saveButton.clicked.connect(lambda: self.saveSelectedDataset(dataList.currentIndex()))
+        defaultFolderButton = QPushButton(self.folderIcon,"")
+        defaultFolderButton.setToolTip("Set default folder")
+        defaultFolderButton.clicked.connect(self.selectDefaultFolder)
+        dataLayout.addWidget(dataList,0,0,1,5)
+        dataLayout.addWidget(newButton,1,0,1,1)
+        dataLayout.addWidget(editButton,1,1,1,1)
+        dataLayout.addWidget(loadButton,1,2,1,1)
+        dataLayout.addWidget(saveButton,1,3,1,1)
+        dataLayout.addWidget(defaultFolderButton,1,4,1,1)
+        #Apply layout to page, add page to tab widget
+        dataPage.setLayout(dataLayout)
+        tabIndex = self.dockTabs.addTab(dataPage,"Data")
+        #Start on data tab for now
+        self.dockTabs.setCurrentIndex(tabIndex)
+
+        #Add the tab widget to the main dock layout
+        mainDockLayout.addWidget(self.dockTabs)
+
+        #Create placeholder variant widget
+        variantWidget = QWidget()
+        variantLayout = QGridLayout()
+        variantList = QTableView()
+        variantLayout.addWidget(variantList,0,0)
+        variantWidget.setLayout(variantLayout)
+        #Add variant widget to main dock layout
+        mainDockLayout.addWidget(variantWidget)
+
+        #Apply the main dock layout
+        mainDockContents.setLayout(mainDockLayout)
+        #Create the dock widget itself, set content to just created content widget, and add to main window
+        self.dockWidget = QDockWidget("Dock", self)
+        self.dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.dockWidget.setWidget(mainDockContents)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.dockWidget)
+
+        #Look at: setting title bar widget to empty widget.
+        #Non-closable / possiblity to open another if has been closed
+        #Tabs to even have, what should be default, maybe switch to immutable datasets (but var..)
+        #Scene tab names should be able to be set
+
+    def dockTabChanged(self):
+        pass
 
     #Exports anything in the current view as a png image
     def exportImage(self):
-        #Set default name to same as the vcf file in current view
-        view = self.sceneTabs.currentWidget()
-        viewDataset = view.returnActiveDataset()
-        tabName = viewDataset['tabName']
-        vcfName = viewDataset['vcfName']
-        try:
-            defaultPath = QDir.currentPath() + "/" + vcfName
-            defaultPath = defaultPath.replace("vcf","png")
-        except:
-            defaultPath = QDir.currentPath() + "/" + tabName
-            defaultPath = defaultPath.replace("tab","png")
-        savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
-        viewPixMap = QPixmap.grabWidget(view)
-        viewPixMap.save(savePath)
+        if self.activeScene:
+            #Set default name to same as the vcf file in current view
+            view = self.sceneTabs.currentWidget()
+            viewDataset = view.returnActiveDataset()
+            tabName = viewDataset['tabName']
+            vcfName = viewDataset['vcfName']
+            try:
+                defaultPath = QDir.currentPath() + "/" + vcfName
+                defaultPath = defaultPath.replace("vcf","png")
+            except:
+                defaultPath = QDir.currentPath() + "/" + tabName
+                defaultPath = defaultPath.replace("tab","png")
+            savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
+            viewPixMap = QPixmap.grabWidget(view)
+            viewPixMap.save(savePath)
 
     #Checks if an active scene is running and if it's ok to continue (closing scene?)
     def confirmChange(self):
@@ -96,19 +196,25 @@ class WGSView(QMainWindow):
         else:
             return True
 
-    def addMenuItems(self):
-        self.fileMenu.addAction(self.newCircAct)
-        self.fileMenu.addAction(self.newCovDiagramAct)
-        self.fileMenu.addAction(self.newKaryogramAct)
-        self.fileMenu.addAction(self.newHeatmapAct)
-        self.fileMenu.addAction(self.viewDatasetsAct)
-        self.fileMenu.addAction(self.saveDatasetAct)
-        self.fileMenu.addAction(self.exitAct)
-
     def selectDefaultFolder(self):
         selectedDir = QFileDialog.getExistingDirectory()
         if selectedDir:
             self.defaultFolder = selectedDir
+
+    def saveSelectedDataset(self,index):
+        if index.isValid() and not self.datasetModel.itemFromIndex(index).hasChildren():
+            index = index.parent()
+        if index.isValid():
+            selectedData = self.datasetModel.itemFromIndex(index).data()
+            filename = selectedData['setName'] + ".pkl"
+            if not self.defaultFolder:
+                startPath = QDir.currentPath() + "/" + filename
+            else:
+                startPath = self.defaultFolder + "/" + filename
+            savePath = QFileDialog.getSaveFileName(self, "Save dataset", startPath, "Pickle files (*.pkl)")[0]
+            if savePath:
+                with open(savePath, 'wb') as output:
+                    pickle.dump(selectedData, output, pickle.HIGHEST_PROTOCOL)
 
     def saveDataset(self):
         selectedData = self.selectDataset()
@@ -190,23 +296,23 @@ class WGSView(QMainWindow):
             #If no default folder was set, set it to folder containing chosen tab
             if not self.defaultFolder and tabFile:
                 self.defaultFolder = QFileInfo(tabFile).absolutePath()
-            elif not self.defaultFolder:
-                self.defaultFolder = QDir.currentPath()
-            vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
-            "VCF files (*.vcf)")[0]
-            cytoFile = "cytoBand.txt"
-            #Cancel results in empty string, only go ahead if not empty
-            if tabFile and vcfFile:
-                reader = data.Reader()
-                self.statusBar().showMessage("Reading TAB..")
-                reader.readTab(tabFile)
-                self.statusBar().showMessage("Reading VCF..")
-                reader.readVCFFile(vcfFile)
-                self.statusBar().showMessage("Reading cytoband file..")
-                reader.readCytoTab(cytoFile)
-                self.statusBar().clearMessage()
-                #Create a model item to be used for viewing datasets
-                self.createDatasetItem(reader, setName)
+            #Don't continue if user has cancelled
+            if tabFile:
+                vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
+                "VCF files (*.vcf)")[0]
+                cytoFile = "cytoBand.txt"
+                #Cancel results in empty string, only go ahead if not empty
+                if tabFile and vcfFile:
+                    reader = data.Reader()
+                    self.statusBar().showMessage("Reading TAB..")
+                    reader.readTab(tabFile)
+                    self.statusBar().showMessage("Reading VCF..")
+                    reader.readVCFFile(vcfFile)
+                    self.statusBar().showMessage("Reading cytoband file..")
+                    reader.readCytoTab(cytoFile)
+                    self.statusBar().clearMessage()
+                    #Create a model item to be used for viewing datasets
+                    self.createDatasetItem(reader, setName)
 
     def editDataset(self,index):
         #User might have clicked on a child item with no data -- try to get parent item if so
@@ -215,25 +321,26 @@ class WGSView(QMainWindow):
         if index.isValid():
             tabFile = QFileDialog.getOpenFileName(None,"Specify TAB file",self.defaultFolder,
             "TAB files (*.tab)")[0]
-            vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
-            "VCF files (*.vcf)")[0]
-            cytoFile = "cytoBand.txt"
-            #Cancel results in empty string, only go ahead if not empty
-            if tabFile and vcfFile:
-                reader = data.Reader()
-                self.statusBar().showMessage("Reading TAB..")
-                reader.readTab(tabFile)
-                self.statusBar().showMessage("Reading VCF..")
-                reader.readVCFFile(vcfFile)
-                self.statusBar().showMessage("Reading cytoband file..")
-                reader.readCytoTab(cytoFile)
-                self.statusBar().clearMessage()
-                #Remove current item from model, create a new item, insert item
-                oldItem = self.datasetModel.itemFromIndex(index)
-                setName = oldItem.data()["setName"]
-                oldRow = index.row()
-                self.datasetModel.removeRow(oldRow)
-                self.createDatasetItem(reader, setName)
+            if tabFile:
+                vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
+                "VCF files (*.vcf)")[0]
+                cytoFile = "cytoBand.txt"
+                #Cancel results in empty string, only go ahead if not empty
+                if tabFile and vcfFile:
+                    reader = data.Reader()
+                    self.statusBar().showMessage("Reading TAB..")
+                    reader.readTab(tabFile)
+                    self.statusBar().showMessage("Reading VCF..")
+                    reader.readVCFFile(vcfFile)
+                    self.statusBar().showMessage("Reading cytoband file..")
+                    reader.readCytoTab(cytoFile)
+                    self.statusBar().clearMessage()
+                    #Remove current item from model, create a new item, insert item
+                    oldItem = self.datasetModel.itemFromIndex(index)
+                    setName = oldItem.data()["setName"]
+                    oldRow = index.row()
+                    self.datasetModel.removeRow(oldRow)
+                    self.createDatasetItem(reader, setName)
 
     #Opens a window showing existing datasets
     def viewDatasets(self):
@@ -299,19 +406,18 @@ class WGSView(QMainWindow):
             self.lastActiveView.closeOpenWindows()
             self.removeToolBar(self.tools)
             self.tools.hide()
-            self.tools.destroy()
-            self.fileMenu.removeAction(self.viewSettingsAct)
-            self.fileMenu.removeAction(self.exportImageAct)
-            self.fileMenu.removeAction(self.exitAct)
+            self.tools.deleteLater()
         except:
             pass
         self.lastActiveView = view
-        #Add the settings menu item for this view, and export image
-        self.viewSettingsAct = QAction('Settings',self)
-        self.viewSettingsAct.triggered.connect(view.viewSettings)
-        self.fileMenu.addAction(self.viewSettingsAct)
-        self.fileMenu.addAction(self.exportImageAct)
-        self.fileMenu.addAction(self.exitAct)
+        #Add this view's chromosome info widget
+        infoWidget = view.returnChromoInfoWidget()
+        #Connect selection of chromosome to update variant view
+        chTable = infoWidget.layout().itemAtPosition(0,0).widget()
+        chTable.clicked.connect(self.updateVariantView)
+        self.dockTabs.removeTab(0)
+        self.dockTabs.insertTab(0,infoWidget,"Chromosomes")
+        self.dockTabs.setCurrentIndex(0)
         #Add appropriate toolbar for scene type
         viewType = view.type
         if viewType == "circ":
@@ -380,7 +486,7 @@ class WGSView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = circ.CircView(selectedData)
+            view = circ.CircView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Circular")
             self.sceneTabs.setCurrentIndex(tabIndex)
@@ -395,7 +501,7 @@ class WGSView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = coverage.CoverageScrollArea(selectedData)
+            view = coverage.CoverageScrollArea(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
@@ -410,7 +516,7 @@ class WGSView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = karyogram.KaryogramView(selectedData)
+            view = karyogram.KaryogramView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Karyogram")
             self.sceneTabs.setCurrentIndex(tabIndex)
@@ -425,8 +531,101 @@ class WGSView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = heatmap.HeatmapScrollArea(selectedData)
+            view = heatmap.HeatmapScrollArea(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Heatmap")
             self.sceneTabs.setCurrentIndex(tabIndex)
             self.show()
+
+    def createColorModel(self):
+        #Model allowing stain colors to be changed globally
+        self.stainNames = ['acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
+        self.stainColors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
+        'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
+        self.colorModel = QStandardItemModel()
+        stainItems = []
+        colorItems = []
+        for stainName in self.stainNames:
+            stainItem = QStandardItem(stainName)
+            stainItem.setEditable(False)
+            stainItem.setSelectable(False)
+            stainItems.append(stainItem)
+            colorItem = QStandardItem()
+            colorItem.setBackground(self.stainColors[stainName])
+            colorItem.setEditable(False)
+            colorItem.setSelectable(False)
+            colorItems.append(colorItem)
+        self.colorModel.appendColumn(stainItems)
+        self.colorModel.appendColumn(colorItems)
+
+    def pickColor(self,modelIndex):
+        selectedRow = modelIndex.row()
+        stainItem = self.colorModel.item(selectedRow,0)
+        colorItem = self.colorModel.item(selectedRow,1)
+        chosenColor = QColorDialog.getColor(colorItem.background().color())
+        self.stainColors[stainItem.text()] = chosenColor
+        colorItem.setBackground(chosenColor)
+
+    def viewSettings(self):
+        settingsLayout = QGridLayout()
+        #Get the active view settings, if any are active. Else empty.
+        if self.activeScene:
+            view = self.sceneTabs.currentWidget()
+            activeViewPage = view.returnSettingsWidget()
+        else:
+            activeViewPage = QWidget()
+        #General settings
+        generalPage = QWidget()
+        generalLayout = QGridLayout()
+        generalList = QTableView()
+        generalList.setShowGrid(False)
+        generalList.horizontalHeader().hide()
+        generalList.verticalHeader().hide()
+        generalLayout.addWidget(generalList,0,0)
+        generalPage.setLayout(generalLayout)
+        #Color settings
+        colorPage = QWidget()
+        colorLayout = QGridLayout()
+        colorList = QTableView()
+        colorList.setShowGrid(False)
+        colorList.horizontalHeader().hide()
+        colorList.verticalHeader().hide()
+        colorList.setModel(self.colorModel)
+        colorList.doubleClicked.connect(self.pickColor)
+        colorLayout.addWidget(colorList,0,0)
+        colorPage.setLayout(colorLayout)
+        #Create the settings stack and a list for selection
+        settingsStack = QStackedWidget()
+        settingsStack.addWidget(activeViewPage)
+        settingsStack.addWidget(generalPage)
+        settingsStack.addWidget(colorPage)
+        stackList = QListWidget()
+        QListWidgetItem("Active view", stackList)
+        QListWidgetItem("General", stackList)
+        QListWidgetItem("Colors", stackList)
+        stackList.currentRowChanged.connect(settingsStack.setCurrentIndex)
+        settingsDia = QDialog(self)
+        applyButton = QPushButton('Apply', settingsDia)
+        applyButton.clicked.connect(settingsDia.accept)
+        applyButton.clicked.connect(self.updateSettings)
+        settingsLayout.addWidget(stackList,0,0)
+        settingsLayout.addWidget(settingsStack,0,1)
+        settingsLayout.addWidget(applyButton,1,0,1,1)
+        settingsDia.setWindowTitle("Settings")
+        settingsDia.setLayout(settingsLayout)
+        settingsDia.show()
+
+    #Should update settings only on apply (currently updates on item change and color pick).
+    def updateSettings(self):
+        pass
+
+    #Other views need appropriate function added, will restructure soon
+    def updateVariantView(self,index):
+        view = self.sceneTabs.currentWidget()
+        if view.type == 'circ':
+            selectedRow = index.row()
+            varWidget = view.returnVariantWidget(selectedRow)
+            oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
+            oldWidget.deleteLater()
+            self.dockWidget.widget().layout().insertWidget(1,varWidget)
+            self.update()
