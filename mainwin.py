@@ -501,7 +501,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = coverage.CoverageScrollArea(selectedData,self)
+            view = coverage.CoverageView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
