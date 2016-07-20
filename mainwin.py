@@ -438,11 +438,11 @@ class SciVisView(QMainWindow):
         if viewType == "coverage":
             self.tools = self.addToolBar('Coverage tools')
             self.showChInfoAct = QAction('Chromosomes',self)
-            self.showChInfoAct.triggered.connect(view.subview.showChInfo)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
             self.addPlotAct = QAction('Add subplot', self)
-            self.addPlotAct.triggered.connect(view.subview.addChromoPlot)
+            #self.addPlotAct.triggered.connect(view.addChromoPlot)
             self.updateLayoutAct = QAction('Update layout', self)
-            self.updateLayoutAct.triggered.connect(view.subview.arrangePlots)
+            #self.updateLayoutAct.triggered.connect(view.arrangePlots)
             self.tools.addAction(self.showChInfoAct)
             self.tools.addAction(self.addPlotAct)
             self.tools.addAction(self.updateLayoutAct)
@@ -497,7 +497,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = coverage.CoverageScrollArea(selectedData,self)
+            view = coverage.CoverageView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
