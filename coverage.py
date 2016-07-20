@@ -1,17 +1,7 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-import numpy as np
 import math
 import common
-from matplotlib.figure import Figure
-from matplotlib.backend_bases import key_press_handler
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
-from matplotlib.backends.backend_qt4agg import (
-    FigureCanvasQTAgg as FigureCanvas,
-    NavigationToolbar2QT as NavigationToolbar)
 
 class CoverageView(QGraphicsView):
 
@@ -22,11 +12,6 @@ class CoverageView(QGraphicsView):
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.cytoInfo = self.dataDict['cytoTab']
-        self.subWindows = []
-        self.grid = QGridLayout()
-        self.setLayout(self.grid)
-        self.resize(QDesktopWidget().availableGeometry(self).size())
-        self.maxColumns = 2
         self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
@@ -36,40 +21,9 @@ class CoverageView(QGraphicsView):
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
         self.setRenderHints(QPainter.Antialiasing)
-        self.resize(QDesktopWidget().availableGeometry(self).size())
-        self.show()
-        self.initscene(self.chromosomes[0])
 
     def returnActiveDataset(self):
         return self.dataDict
-
-    #Adds a subwindow containing a matplotlib widget to the grid layout
-    def addChromoPlot(self):
-        addDialog = QDialog()
-        addDialog.setWindowTitle("Add plot")
-        applyButton = QPushButton('Ok', addDialog)
-        applyButton.clicked.connect(addDialog.accept)
-        chromoBox = QComboBox()
-        chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-        chromoBox.addItems(chromoStrings)
-        chrLabel = QLabel("Add plot for chromosome: ")
-        typeBox = QComboBox()
-        typeStrings = ["Line plot", "Scatter plot"]
-        typeBox.addItems(typeStrings)
-        typeLabel = QLabel("Plot method: ")
-        addDialog.layout = QGridLayout(addDialog)
-        addDialog.layout.addWidget(chrLabel,0,0)
-        addDialog.layout.addWidget(chromoBox,0,1)
-        addDialog.layout.addWidget(typeLabel,1,0)
-        addDialog.layout.addWidget(typeBox,1,1)
-        addDialog.layout.addWidget(applyButton,2,0)
-        choice = addDialog.exec_()
-        if choice == QDialog.Accepted:
-            chromo = self.chromosomes[chromoBox.currentIndex()]
-            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(), self.cytoInfo,self)
-            self.subWindows.append(chromoPlot)
-            self.arrangePlots()
-
 
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
@@ -94,20 +48,12 @@ class CoverageView(QGraphicsView):
         maxCovLimitData = QStandardItem()
         maxCovLimitData.setData(self.maxCoverage*100,0)
         maxCovLimitData.setEditable(True)
-        maxColumnsText = QStandardItem("Number of columns")
-        maxColumnsText.setEditable(False)
-        maxColumnsText.setToolTip("Number of columns to arrange diagrams in")
-        maxColumnsData = QStandardItem()
-        maxColumnsData.setData(self.maxColumns,0)
-        maxColumnsData.setEditable(True)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
         self.settingsModel.setItem(1,0,minCovLimitText)
         self.settingsModel.setItem(1,1,minCovLimitData)
         self.settingsModel.setItem(2,0,maxCovLimitText)
         self.settingsModel.setItem(2,1,maxCovLimitData)
-        self.settingsModel.setItem(3,0,maxColumnsText)
-        self.settingsModel.setItem(3,1,maxColumnsData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
     def viewSettings(self):
@@ -134,8 +80,6 @@ class CoverageView(QGraphicsView):
             self.minCoverage = item.data(0)/100
         if item.row() == 2:
             self.maxCoverage = item.data(0)/100
-        if item.row() == 3:
-            self.maxColumns = item.data(0)
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
@@ -250,13 +194,18 @@ class CoverageView(QGraphicsView):
             chromo = self.chromosomes[row]
             common.addVariant(chromo,self.chromosomes)
 
+    def defineRectangles(self):
+        size = self.size()
+        self.viewArea = QRect(QPoint(0,0), QPoint(size.width(),size.height()))
+        self.graphArea = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
+
     def createLinePlot(self, chromo):
         size = self.size()
         coverageData = []
         normValue = self.coverageNorm
         minCov = normValue*self.minCoverage
         maxCov = normValue*self.maxCoverage
-        containerRect = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
+        #Create an average values for coverage, depending into user defined window
         coverageChunks = [chromo.coverage[i:i+(self.bpWindow)] for i in range(0,len(chromo.coverage),(self.bpWindow))]
         for chunk in coverageChunks:
             val = sum(chunk) / len(chunk)
@@ -268,11 +217,11 @@ class CoverageView(QGraphicsView):
             coverageData.append(2*val/normValue)
 
         xAxisPath = QPainterPath()
-        xAxisPath.moveTo(50,containerRect.height()-50)
-        xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
+        xAxisPath.moveTo(50,self.graphArea.height()-50)
+        xAxisPath.lineTo(self.graphArea.width()-250, self.graphArea.height()-50)
         xAxisItem = QGraphicsPathItem(xAxisPath)
         yAxisPath = QPainterPath()
-        yAxisPath.moveTo(50,containerRect.height()-50)
+        yAxisPath.moveTo(50,self.graphArea.height()-50)
         yAxisPath.lineTo(50, 50)
         yAxisItem = QGraphicsPathItem(yAxisPath)
         self.scene.addItem(xAxisItem)
@@ -339,7 +288,6 @@ class CoverageView(QGraphicsView):
         normValue = self.coverageNorm
         minCov = normValue*self.minCoverage
         maxCov = normValue*self.maxCoverage
-        containerRect = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
         coverageChunks = [chromo.coverage[i:i+(self.bpWindow)] for i in range(0,len(chromo.coverage),(self.bpWindow))]
         for chunk in coverageChunks:
             val = sum(chunk) / len(chunk)
@@ -350,54 +298,70 @@ class CoverageView(QGraphicsView):
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
 
-        xAxisPath = QPainterPath()
-        xAxisPath.moveTo(50,containerRect.height()-50)
-        xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
-        xAxisItem = QGraphicsPathItem(xAxisPath)
         yAxisPath = QPainterPath()
-        yAxisPath.moveTo(50,containerRect.height()-50)
-        yAxisPath.lineTo(50, 50)
+        yAxisPath.moveTo(self.graphArea.bottomLeft())
+        yAxisPath.lineTo(self.graphArea.topLeft())
+        yAxisPath.moveTo(self.graphArea.bottomRight())
+        yAxisPath.lineTo(self.graphArea.topRight())
         yAxisItem = QGraphicsPathItem(yAxisPath)
-        self.scene.addItem(xAxisItem)
         self.scene.addItem(yAxisItem)
 
         dupLimit = 2.25
         delLimit = 1.75
-        xAxisIncrement = (int(xAxisItem.boundingRect().width()))/len(coverageData)
-        yAxisIncrement = (int(yAxisItem.boundingRect().height()))/(10)
+        xAxisIncrement = int( self.graphArea.width()) / len(coverageData )
+        yAxisIncrement = self.graphArea.height() / (self.maxCoverage*2)
 
-        for incr in range(int(xAxisItem.boundingRect().width())):
-            xTickPath = QPainterPath()
-            xTickLabel = ""
-            if incr%200 == 0 and incr != 0 or incr == int(xAxisItem.boundingRect().width())-1:
-                lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)
-                xTickPath.moveTo(lineBetween.pointAt(0))
-                xTickPath.lineTo(lineBetween.pointAt(1))
-                xTickLabel = str(int((math.pow(xAxisIncrement, -1))*incr))
-            xTickItem = QGraphicsPathItem(xTickPath)
-            xTickLabelItem = QGraphicsTextItem(xTickLabel)
-            xTickLabelItem.setPos(xTickPath.currentPosition() + QPointF(-10, 10))
-            self.scene.addItem(xTickItem)
-            self.scene.addItem(xTickLabelItem)
-        for incr in range(int(yAxisItem.boundingRect().height())):
+        markerPen = QPen()
+        markerPen.setStyle(Qt.DashLine)
+
+        for i in range(0,2*self.maxCoverage+1):
             yTickPath = QPainterPath()
-            yTickLabel = ""
-            if incr%300 == 0 and incr != 0 or incr == int(yAxisItem.boundingRect().height())-1:
-                lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)
-                yTickPath.moveTo(lineBetween.pointAt(0))
-                yTickPath.lineTo(lineBetween.pointAt(1))
-                yTickLabel = str(int((math.pow(yAxisIncrement, -1))*incr))
-            yTickItem = QGraphicsPathItem(yTickPath)
-            yTickLabelItem = QGraphicsTextItem(yTickLabel)
-            yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-65, -10))
-            self.scene.addItem(yTickItem)
+            point = QPointF(self.graphArea.left(), self.graphArea.bottom() - (i)*yAxisIncrement)
+            yTickPath.moveTo(point)
+            line = QLineF()
+            line.setP1(yTickPath.currentPosition())
+            line.setP2(yTickPath.currentPosition() + QPointF(self.graphArea.width(),0))
+            lineItem = QGraphicsLineItem(line)
+            if not(i == 0 or i == self.maxCoverage*2):
+                lineItem.setPen(markerPen)
+                lineItem.setOpacity(0.5)
+            self.scene.addItem(lineItem)
+            yTickLabelItem = QGraphicsTextItem(str(i))
+            yTickLabelItem.setPos(yTickPath.currentPosition() +  QPointF(-20, -20))
             self.scene.addItem(yTickLabelItem)
+
+        # for incr in range(int(xAxisItem.boundingRect().width())):
+        #     xTickPath = QPainterPath()
+        #     xTickLabel = ""
+        #     if incr%200 == 0 and incr != 0 or incr == int(xAxisItem.boundingRect().width())-1:
+        #         lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)
+        #         xTickPath.moveTo(lineBetween.pointAt(0))
+        #         xTickPath.lineTo(lineBetween.pointAt(1))
+        #         xTickLabel = str(int((math.pow(xAxisIncrement, -1))*incr))
+        #     xTickItem = QGraphicsPathItem(xTickPath)
+        #     xTickLabelItem = QGraphicsTextItem(xTickLabel)
+        #     xTickLabelItem.setPos(xTickPath.currentPosition() + QPointF(-10, 10))
+        #     self.scene.addItem(xTickItem)
+        #     self.scene.addItem(xTickLabelItem)
+
+        # for incr in range(int(yAxisItem.boundingRect().height())):
+        #     yTickPath = QPainterPath()
+        #     yTickLabel = ""
+        #     if incr%300 == 0 and incr != 0 or incr == int(yAxisItem.boundingRect().height())-1:
+        #         lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)
+        #         yTickPath.moveTo(lineBetween.pointAt(0))
+        #         yTickPath.lineTo(lineBetween.pointAt(1))
+        #         yTickLabel = str(int((math.pow(yAxisIncrement, -1))*incr))
+        #     yTickItem = QGraphicsPathItem(yTickPath)
+        #     yTickLabelItem = QGraphicsTextItem(yTickLabel)
+        #     yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-65, -10))
+        #     self.scene.addItem(yTickItem)
+        #     self.scene.addItem(yTickLabelItem)
 
 
         for index in range(len(coverageData)):
-            pointPath = QPainterPath()
-            pointPath.addEllipse(index*xAxisIncrement + 50, int(yAxisItem.boundingRect().height()) - coverageData[index]*yAxisIncrement + 45, 5, 5)
-            pointItem = QGraphicsPathItem(pointPath)
+            pointRect = QRectF( self.graphArea.left() + (index/len(coverageData))*self.graphArea.width(), self.graphArea.bottom() - coverageData[index]*yAxisIncrement, 5, 5  )
+            pointItem = QGraphicsEllipseItem(pointRect)
             if coverageData[index] < delLimit:
                 pointItem.setBrush(QBrush(Qt.red))
             elif coverageData[index] > dupLimit:
@@ -406,16 +370,21 @@ class CoverageView(QGraphicsView):
                 pointItem.setBrush(QBrush(Qt.black))
             self.scene.addItem(pointItem)
 
-
-
-
-    def initscene(self, chromo):
+    def initscene(self, chromoNumber):
+        #self.setSceneRect(QRect(0,0,100,100))
+        chromo = self.chromosomes[chromoNumber]
         self.scene.clear()
+        self.defineRectangles()
         if self.plotType == 0:
             self.createScatterPlot(chromo)
         else:
             self.createLinePlot(chromo)
         self.update()
+        self.activeChromo = chromoNumber
+
+    def changePlotType(self,index):
+        self.plotType = index
+        self.initscene(self.activeChromo)
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
