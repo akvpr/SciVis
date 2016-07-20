@@ -2,6 +2,7 @@ import sys
 import random
 import math
 import data
+import common
 from PySide.QtCore import *
 from PySide.QtGui import *
 
@@ -21,8 +22,6 @@ class CircView(QGraphicsView):
         self.graphicItems = []
         self.coverageItems = []
         self.connectionItems = {}
-        self.activeVariantModels = {}
-        self.activeVariantTables = {}
 
         self.bpWindow = 500
         self.bpDistanceResolution = 10
@@ -315,53 +314,6 @@ class CircView(QGraphicsView):
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score', 'Active']
-        varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startItem = QStandardItem()
-            #set data with start as role 0
-            startItem.setData(variant[1],0)
-            infoitem.append(startItem)
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-                endItem = QStandardItem()
-                #if chrB, set this as data with role 1, end as role 2
-                endItem.setData(variant[2],1)
-                endItem.setData(variant[3],2)
-            else:
-                endText = str(variant[3])
-                endItem = QStandardItem()
-                #if no chrB, set 0 as role 1, end as role 2
-                endItem.setData(str(0),1)
-                endItem.setData(variant[3],2)
-            endItem.setData(endText,Qt.DisplayRole)
-            infoitem.append(endItem)
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            #this is rankscore in the variant
-            infoitem.append(QStandardItem(variant[10]))
-            #this is a check for displaying a variant or not
-            dispCheckItem = QStandardItem()
-            dispCheckItem.setCheckable(False)
-            if variant[9]:
-                dispCheckItem.setCheckState(Qt.Checked)
-            else:
-                dispCheckItem.setCheckState(Qt.Unchecked)
-            infoitem.append(dispCheckItem)
-            varModel.appendRow(infoitem)
-        self.activeVariantModels[chromo.name] = varModel
-
     #Creates a popup containing variant info in a table.
     def viewVariants(self):
         #Find which chromosome's variants is to be viewed by looking at chList rows
@@ -371,122 +323,25 @@ class CircView(QGraphicsView):
         #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            #Create button for activation of variants
-            varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
-            varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
-            varList.setSortingEnabled(True)
-            varList.setMinimumSize(700,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            sourceModel = self.activeVariantModels[chromo.name]
-            proxyModel = VariantSortModel(self)
-            proxyModel.setSourceModel(sourceModel)
-            varList.setModel(proxyModel)
-            varList.resizeColumnToContents(1)
-            varList.resizeColumnToContents(2)
-            self.activeVariantTables[chromo.name] = varList
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
-            viewVarDia.layout.addWidget(varButton,1,0)
+            viewVarDia = common.createVariantDia(chromo,self)
+            #Also connect toggle button in the widget to update scene
+            viewVarDia.layout.itemAtPosition(2,0).widget().clicked.connect(self.initscene)
             viewVarDia.show()
 
-    def returnVariantWidget(self,row):
+    def createVariantWidget(self,row):
         chromo = self.chromosomes[row]
-        self.createVariantInfo(chromo)
-        varList = QTableView()
-        #Create button for activation of variants
-        varButton = QPushButton('Toggle selected variant(s)')
-        varButton.clicked.connect(lambda: self.toggleVariants(chromo.name, row))
-        varList.setSortingEnabled(True)
-        varList.verticalHeader().hide()
-        varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        sourceModel = self.activeVariantModels[chromo.name]
-        proxyModel = VariantSortModel()
-        proxyModel.setSourceModel(sourceModel)
-        varList.setModel(proxyModel)
-        varList.resizeColumnToContents(1)
-        varList.resizeColumnToContents(2)
-        self.activeVariantTables[chromo.name] = varList
-        varLayout = QGridLayout()
-        varLayout.addWidget(varList,0,0)
-        varLayout.addWidget(varButton,1,0)
-        varWidget = QWidget()
-        varWidget.setLayout(varLayout)
+        varWidget = common.createVariantWidget(chromo)
+        #Also connect toggle button in the widget to update scene
+        varWidget.layout().itemAtPosition(2,0).widget().clicked.connect(self.initscene)
         return varWidget
 
-    #Toggles individual variants on and off
-    def toggleVariants(self, chromoName, chromoIndex):
-        selectedProxyIndexes = self.activeVariantTables[chromoName].selectedIndexes()
-        #Selected indexes are indexes in proxy model, so translate to source indexes
-        selectedIndexes = [self.activeVariantTables[chromoName].model().mapToSource(proxyIndex) for proxyIndex in selectedProxyIndexes]
-        selectedRows = [index.row() for index in selectedIndexes]
-        selectedRows = set(selectedRows)
-        for row in selectedRows:
-            dispVarItem = self.activeVariantModels[chromoName].item(row,6)
-            if self.chromosomes[chromoIndex].variants[row][9]:
-                dispVarItem.setCheckState(Qt.Unchecked)
-                self.chromosomes[chromoIndex].variants[row][9] = False
-            else:
-                dispVarItem.setCheckState(Qt.Checked)
-                self.chromosomes[chromoIndex].variants[row][9] = True
-        self.chromosomes[chromoIndex].createConnections()
-        self.initscene()
-
-    #Adds a variant to selected chromosomes. Some models still have to be updated.
-    #Not sure how to best handle input yet.
     def addVariant(self):
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
 
     #Reads an image and adds it to the scene
     def addImage(self):
@@ -974,66 +829,6 @@ class CircView(QGraphicsView):
             self.scale(1.1,1.1)
         else:
             QGraphicsView.wheelEvent(self, event)
-
-#Custom class of proxy model to handle custom sorting of variants
-class VariantSortModel(QSortFilterProxyModel):
-
-    def sort(self, column, order):
-        if column != 6:
-            QSortFilterProxyModel.sort(self,column,order)
-
-    #Return true if left less than right, otherwise false
-    #left and right are QModelIndexes, taking displayrole data by default
-    def lessThan(self, left, right):
-        if left.column() == 0:
-            #sort alphabetically by TYPE
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            return leftData < rightData
-        elif left.column() == 1:
-            #sort by START as ints
-            leftData = int(self.sourceModel().data(left,0))
-            rightData = int(self.sourceModel().data(right,0))
-            return leftData < rightData
-        elif left.column() == 2:
-            #if the column is 2, i.e. END, see if role 3 data for both items is > 0 (both have chrB)
-            #if only one of the items has chrB, put item with chrB as less than
-            leftData = self.sourceModel().data(left,1)
-            rightData = self.sourceModel().data(right,1)
-            if leftData != '0' and rightData != '0':
-                #If both are digits (i.e. not X,Y,GL.. etc), compare as ints
-                #If only one is digit put digit chr as the lesser data
-                if leftData.isdigit() and rightData.isdigit():
-                    return int(leftData) < int(rightData)
-                elif leftData.isdigit():
-                    return True
-                elif rightData.isdigit():
-                    return False
-                else:
-                    return leftData < rightData
-            elif leftData != '0':
-                return True
-            elif rightData != '0':
-                return False
-            else:
-                #If no item has chrB, sort by end as an int
-                leftData = int(self.sourceModel().data(left,2))
-                rightData = int(self.sourceModel().data(right,2))
-                return leftData < rightData
-        elif left.column() == 3 or left.column() == 4:
-            #sort alphabetically by GENE(S) or CYTOBAND
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            return leftData < rightData
-        elif left.column() == 5:
-            #sort by Rank Score. Format is x:y Second value is priority.
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            leftSecondValue = int(leftData.split(':')[1])
-            rightSecondValue = int(rightData.split(':')[1])
-            return leftSecondValue < rightSecondValue
-        else:
-            return leftData < rightData
 
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):

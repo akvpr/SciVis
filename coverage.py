@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
 import math
+import common
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -224,103 +225,30 @@ class CoverageView(QGraphicsView):
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
-
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia = common.createVariantDia(chromo,self)
             viewVarDia.show()
 
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        return varWidget
+
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
 
     def createLinePlot(self, chromo):
         size = self.size()
@@ -338,7 +266,7 @@ class CoverageView(QGraphicsView):
                 val = minCov
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
-            
+
         xAxisPath = QPainterPath()
         xAxisPath.moveTo(50,containerRect.height()-50)
         xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
@@ -349,17 +277,17 @@ class CoverageView(QGraphicsView):
         yAxisItem = QGraphicsPathItem(yAxisPath)
         self.scene.addItem(xAxisItem)
         self.scene.addItem(yAxisItem)
-        
+
         dupLimit = 2.25
         delLimit = 1.75
         xAxisIncrement = (int(xAxisItem.boundingRect().width()))/len(coverageData)
         yAxisIncrement = (int(yAxisItem.boundingRect().height()))/(10)
-        
+
         for incr in range(int(xAxisItem.boundingRect().width())):
             xTickPath = QPainterPath()
             xTickLabel = ""
             if incr%200 == 0 and incr != 0 or incr == int(xAxisItem.boundingRect().width())-1:
-                lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)            
+                lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)
                 xTickPath.moveTo(lineBetween.pointAt(0))
                 xTickPath.lineTo(lineBetween.pointAt(1))
                 xTickLabel = str(int((math.pow(xAxisIncrement, -1))*incr))
@@ -372,7 +300,7 @@ class CoverageView(QGraphicsView):
             yTickPath = QPainterPath()
             yTickLabel = ""
             if incr%300 == 0 and incr != 0 or incr == int(yAxisItem.boundingRect().height())-1:
-                lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)            
+                lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)
                 yTickPath.moveTo(lineBetween.pointAt(0))
                 yTickPath.lineTo(lineBetween.pointAt(1))
                 yTickLabel = str(int((math.pow(yAxisIncrement, -1))*incr))
@@ -381,7 +309,7 @@ class CoverageView(QGraphicsView):
             yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-65, -10))
             self.scene.addItem(yTickItem)
             self.scene.addItem(yTickLabelItem)
-        
+
         offsetPoint = QPointF(xAxisItem.boundingRect().width()/2, 0)
         linearGradient = QLinearGradient(QPointF(yAxisItem.boundingRect().bottomLeft()) + offsetPoint, QPointF(yAxisItem.boundingRect().topLeft()) + offsetPoint)
         linearGradient.setColorAt(1, Qt.green)
@@ -393,9 +321,9 @@ class CoverageView(QGraphicsView):
         colorBrush = QBrush(linearGradient)
         colorPen = QPen()
         colorPen.setBrush(colorBrush)
-        
+
         for index in range(len(coverageData)):
-            if index < len(coverageData)-1:    
+            if index < len(coverageData)-1:
                 linePath = QPainterPath()
                 startPoint = QPointF(index*xAxisIncrement + 50, int(yAxisItem.boundingRect().height()) - coverageData[index]*yAxisIncrement + 50)
                 endPoint = QPointF((index+1)*xAxisIncrement + 50, int(yAxisItem.boundingRect().height()) - coverageData[index+1]*yAxisIncrement + 50)
@@ -404,7 +332,7 @@ class CoverageView(QGraphicsView):
                 lineItem = QGraphicsPathItem(linePath)
                 lineItem.setPen(colorPen)
                 self.scene.addItem(lineItem)
-    
+
     def createScatterPlot(self, chromo):
         size = self.size()
         coverageData = []
@@ -421,7 +349,7 @@ class CoverageView(QGraphicsView):
                 val = minCov
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
-            
+
         xAxisPath = QPainterPath()
         xAxisPath.moveTo(50,containerRect.height()-50)
         xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
@@ -432,17 +360,17 @@ class CoverageView(QGraphicsView):
         yAxisItem = QGraphicsPathItem(yAxisPath)
         self.scene.addItem(xAxisItem)
         self.scene.addItem(yAxisItem)
-        
+
         dupLimit = 2.25
         delLimit = 1.75
         xAxisIncrement = (int(xAxisItem.boundingRect().width()))/len(coverageData)
         yAxisIncrement = (int(yAxisItem.boundingRect().height()))/(10)
-        
+
         for incr in range(int(xAxisItem.boundingRect().width())):
             xTickPath = QPainterPath()
             xTickLabel = ""
             if incr%200 == 0 and incr != 0 or incr == int(xAxisItem.boundingRect().width())-1:
-                lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)            
+                lineBetween = QLineF(xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()-10, xAxisItem.boundingRect().left() + incr, xAxisItem.boundingRect().top()+10)
                 xTickPath.moveTo(lineBetween.pointAt(0))
                 xTickPath.lineTo(lineBetween.pointAt(1))
                 xTickLabel = str(int((math.pow(xAxisIncrement, -1))*incr))
@@ -455,7 +383,7 @@ class CoverageView(QGraphicsView):
             yTickPath = QPainterPath()
             yTickLabel = ""
             if incr%300 == 0 and incr != 0 or incr == int(yAxisItem.boundingRect().height())-1:
-                lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)            
+                lineBetween = QLineF(yAxisItem.boundingRect().left()-10, yAxisItem.boundingRect().bottom() - incr, yAxisItem.boundingRect().left()+10, yAxisItem.boundingRect().bottom() - incr)
                 yTickPath.moveTo(lineBetween.pointAt(0))
                 yTickPath.lineTo(lineBetween.pointAt(1))
                 yTickLabel = str(int((math.pow(yAxisIncrement, -1))*incr))
@@ -464,7 +392,7 @@ class CoverageView(QGraphicsView):
             yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-65, -10))
             self.scene.addItem(yTickItem)
             self.scene.addItem(yTickLabelItem)
-        
+
 
         for index in range(len(coverageData)):
             pointPath = QPainterPath()
@@ -477,10 +405,10 @@ class CoverageView(QGraphicsView):
             else:
                 pointItem.setBrush(QBrush(Qt.black))
             self.scene.addItem(pointItem)
-            
-        
-        
-        
+
+
+
+
     def initscene(self, chromo):
         self.scene.clear()
         if self.plotType == 0:
@@ -488,7 +416,7 @@ class CoverageView(QGraphicsView):
         else:
             self.createLinePlot(chromo)
         self.update()
-        
+
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)

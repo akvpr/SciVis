@@ -1,6 +1,7 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
 import math
+import common
 
 class KaryogramView(QGraphicsView):
 
@@ -212,51 +213,34 @@ class KaryogramView(QGraphicsView):
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
-
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
+        selectedIndexes = self.chList.selectedIndexes()
+        selectedRows = [index.row() for index in selectedIndexes]
+        selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
+        for row in selectedRows:
+            chromo = self.chromosomes[row]
+            viewVarDia = common.createVariantDia(chromo,self)
+            #Also connect toggle button in the widget to update scene
+            viewVarDia.layout.itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+            viewVarDia.show()
+
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        #Also connect toggle button in the widget to update scene
+        varWidget.layout().itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+        return varWidget
+
+    def addVariant(self):
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
-            viewVarDia.show()
+            common.addVariant(chromo,self.chromosomes)
 
     def toggleDisp(self):
         #The row associated with the item corresponds to a chromosome

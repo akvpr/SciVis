@@ -1,3 +1,4 @@
+import common
 from PySide.QtCore import *
 from PySide.QtGui import *
 import matplotlib.pyplot as plt
@@ -37,6 +38,15 @@ class HeatmapScrollArea(QScrollArea):
 
     def returnActiveDataset(self):
         return self.subview.returnActiveDataset()
+
+    def viewVariants(self):
+        self.subview.viewVariants()
+
+    def createVariantWidget(self,row):
+        return self.subview.createVariantWidget(row)
+
+    def addVariant(self):
+        self.subview.addVariant()
 
 
 class HeatmapView(QWidget):
@@ -267,103 +277,31 @@ class HeatmapView(QWidget):
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
-
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia = common.createVariantDia(chromo,self)
             viewVarDia.show()
 
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        return varWidget
+
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
+
 
 class HeatmapWindow(QWidget):
 
@@ -393,31 +331,31 @@ class HeatmapWindow(QWidget):
         vbox.addWidget(self.mpl_toolbar)
         self.setLayout(vbox)
         self.ax = self.figure.add_subplot(111)
-        
+
         xAxis = int(round(int(chromoA.end)/self.binSize,0))
         yAxis = int(round(int(chromoB.end)/self.binSize,0))
-        
+
         if not chromoA.connections:
             chromoA.createConnections()
-        
+
         A = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0)
         matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0]
         self.matrices.append([A, matrixInfo])
         self.updateHeatmap(self.activeIndex)
-        
+
     def updateHeatmap(self, activeIndex):
 
         self.figure.clear()
         self.ax = self.figure.add_subplot(111)
-        
+
         (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[activeIndex][1]
         if mapping == "TLOC":
             startString = "Position"
             endString = "Position"
         else:
             startString = "Start position"
-            endString = "End position"        
-        
+            endString = "End position"
+
         self.heatmap = self.ax.pcolormesh(self.matrices[activeIndex][0].T, cmap = plt.cm.coolwarm)
         colorbar = self.figure.colorbar(self.heatmap)
         colorbar.set_label("# of interactions")
@@ -437,7 +375,7 @@ class HeatmapWindow(QWidget):
         self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
         self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize/1000) + "kb)")
         self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize/1000) + "kb)")
-        
+
         self.canvas.draw()
 
     def deletePlot(self):
@@ -470,7 +408,7 @@ class HeatmapWindow(QWidget):
             self.canvas.draw()
     def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart):
         B=[[0 for j in range(yAxis)] for i in range(xAxis)]
-        if (mapping == "TLOC"): 
+        if (mapping == "TLOC"):
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
@@ -506,9 +444,9 @@ class HeatmapWindow(QWidget):
                                 B[i][j] = counter
         B = np.asarray(B)
         return B
-    
+
     def zoomIn(self):
-        
+
         B = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY))
         matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY)]
         if self.activeIndex < len(self.matrices)-1:
@@ -519,10 +457,10 @@ class HeatmapWindow(QWidget):
         self.matrices.append([B, matrixInfo])
         self.activeIndex += 1
         self.updateHeatmap(self.activeIndex)
-        
+
     def setColorBar(self):
         return 0
-            
+
 class MplToolbar(NavigationToolbar):
 
     toolitems = [t for t in NavigationToolbar.toolitems if
@@ -530,16 +468,16 @@ class MplToolbar(NavigationToolbar):
 
     def __init__(self ,*args, **kwargs):
         super(MplToolbar, self).__init__(*args, **kwargs)
-        self.layout().takeAt(2) 
-        
+        self.layout().takeAt(2)
+
     def back(self):
         if self.parentWidget().activeIndex > 0:
             self.parentWidget().activeIndex -= 1
             self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
         self.mode = "go back"
-        self.set_message(self.mode)    
+        self.set_message(self.mode)
         print(self.parentWidget().activeIndex)
-        
+
     def forward(self):
         if self.parentWidget().activeIndex < len(self.parentWidget().matrices)-1:
             self.parentWidget().activeIndex += 1

@@ -147,11 +147,6 @@ class SciVisView(QMainWindow):
         self.dockWidget.setWidget(mainDockContents)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dockWidget)
 
-        #Look at: setting title bar widget to empty widget.
-        #Non-closable / possiblity to open another if has been closed
-        #Tabs to even have, what should be default, maybe switch to immutable datasets (but var..)
-        #Scene tab names should be able to be set
-
     def dockTabChanged(self):
         pass
 
@@ -414,7 +409,8 @@ class SciVisView(QMainWindow):
         infoWidget = view.returnChromoInfoWidget()
         #Connect selection of chromosome to update variant view
         chTable = infoWidget.layout().itemAtPosition(0,0).widget()
-        chTable.clicked.connect(self.updateVariantView)
+        selModel = chTable.selectionModel()
+        selModel.selectionChanged.connect(self.updateVariantView)
         self.dockTabs.removeTab(0)
         self.dockTabs.insertTab(0,infoWidget,"Chromosomes")
         self.dockTabs.setCurrentIndex(0)
@@ -442,11 +438,11 @@ class SciVisView(QMainWindow):
         if viewType == "coverage":
             self.tools = self.addToolBar('Coverage tools')
             self.showChInfoAct = QAction('Chromosomes',self)
-            self.showChInfoAct.triggered.connect(view.subview.showChInfo)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
             self.addPlotAct = QAction('Add subplot', self)
-            self.addPlotAct.triggered.connect(view.subview.addChromoPlot)
+            #self.addPlotAct.triggered.connect(view.addChromoPlot)
             self.updateLayoutAct = QAction('Update layout', self)
-            self.updateLayoutAct.triggered.connect(view.subview.arrangePlots)
+            #self.updateLayoutAct.triggered.connect(view.arrangePlots)
             self.tools.addAction(self.showChInfoAct)
             self.tools.addAction(self.addPlotAct)
             self.tools.addAction(self.updateLayoutAct)
@@ -619,13 +615,11 @@ class SciVisView(QMainWindow):
     def updateSettings(self):
         pass
 
-    #Other views need appropriate function added, will restructure soon
-    def updateVariantView(self,index):
+    def updateVariantView(self,selected,deselected):
         view = self.sceneTabs.currentWidget()
-        if view.type == 'circ':
-            selectedRow = index.row()
-            varWidget = view.returnVariantWidget(selectedRow)
-            oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
-            oldWidget.deleteLater()
-            self.dockWidget.widget().layout().insertWidget(1,varWidget)
-            self.update()
+        selectedRow = selected.indexes()[0].row()
+        varWidget = view.createVariantWidget(selectedRow)
+        self.dockWidget.widget().layout().addWidget(varWidget)
+        oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
+        oldWidget.deleteLater()
+        self.dockWidget.updateGeometry()
