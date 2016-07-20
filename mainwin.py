@@ -463,14 +463,11 @@ class SciVisView(QMainWindow):
         if viewType == "heatmap":
             self.tools = self.addToolBar('Coverage tools')
             self.showChInfoAct = QAction('Chromosomes',self)
-            self.showChInfoAct.triggered.connect(view.subview.showChInfo)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
             self.addHeatmapAct = QAction('Add heatmap', self)
-            self.addHeatmapAct.triggered.connect(view.subview.addHeatmap)
-            self.updateLayoutAct = QAction('Update layout', self)
-            self.updateLayoutAct.triggered.connect(view.subview.arrangePlots)
+            self.addHeatmapAct.triggered.connect(view.addHeatmap)
             self.tools.addAction(self.showChInfoAct)
             self.tools.addAction(self.addHeatmapAct)
-            self.tools.addAction(self.updateLayoutAct)
             self.tools.show()
 
     #Creates and initializes a new circular diagram
@@ -527,7 +524,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = heatmap.HeatmapScrollArea(selectedData,self)
+            view = heatmap.HeatmapView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Heatmap")
             self.sceneTabs.setCurrentIndex(tabIndex)
