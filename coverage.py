@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
 import math
+import common
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -38,6 +39,15 @@ class CoverageScrollArea(QScrollArea):
 
     def returnActiveDataset(self):
         return self.subview.returnActiveDataset()
+
+    def viewVariants(self):
+        self.subview.viewVariants()
+
+    def createVariantWidget(self,row):
+        return self.subview.createVariantWidget(row)
+
+    def addVariant(self):
+        self.subview.addVariant()
 
 class CoverageView(QWidget):
 
@@ -262,103 +272,30 @@ class CoverageView(QWidget):
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
-
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia = common.createVariantDia(chromo,self)
             viewVarDia.show()
 
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        return varWidget
+
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
 
 #Widget containing a pyplot, plotting coverage data from given chromosome
 class ChromoPlotWindow(QWidget):
@@ -402,21 +339,21 @@ class ChromoPlotWindow(QWidget):
         dupLimit = 2.25
         delLimit = 1.75
         self.coverageData = []
-        
+
         #Identifies centromere regions according to the cytoTab file
         centromerePos = []
         for cyto in self.cytoInfo:
             if cyto[0] == self.chromo.name and cyto[4] == 'acen':
                 centromerePos.append([int(cyto[1]), int(cyto[2])])
-                
-                
-    
+
+
+
         #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
         colorMap = ListedColormap(['r', 'black', 'g'])
         colorNorm = BoundaryNorm([0, delLimit, dupLimit, 10], 3)
 
         if self.plotType == 0:
-        
+
             coverageChunks = [chromo.coverage[i:i+(self.parentWidget().bpWindow*10)] for i in range(0,len(chromo.coverage),(self.parentWidget().bpWindow*10))]
             for chunk in coverageChunks:
                 val = sum(chunk) / len(chunk)
@@ -426,16 +363,16 @@ class ChromoPlotWindow(QWidget):
                     val = minCov
                 #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
                 self.coverageData.append(2*val/normValue)
-        
+
             #Adding more data points in order to get make shorter segments for a more accurate coloring
             #the goal is to get 10 times more data points, this is not precisely achieved. With resolution 100kb we get 9,964x, 10kb -> 9,9964x, 1kb -> 9,9996x
             extendedData = self.getMean(self.coverageData)
-            
+
             #gives centromere regions the value 2
             for pos in centromerePos:
                 for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
                     extendedData[index] = 2
-            
+
             #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
             #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
             #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
@@ -444,7 +381,7 @@ class ChromoPlotWindow(QWidget):
             #A y1 value below 1.75 -> red color, a y1 value between 1.75 and 2.25 -> black and y1 > 2.25 -> green
             points = np.array([range(len(extendedData)), extendedData]).T.reshape(-1, 1, 2)
             segments = np.concatenate([points[:-1], points[1:]], axis=1)
-            
+
             #converting the coverageData list into a numpy array needed for the LineCollection
             numpyArrayCData = np.array(extendedData)
             lc = LineCollection(segments, cmap=colorMap, norm=colorNorm, pickradius=10)
@@ -452,12 +389,12 @@ class ChromoPlotWindow(QWidget):
             lc.set_picker(True)
             self.ax.add_collection(lc)
             intervalSize = 10
-            self.shadow(extendedData,dupLimit,delLimit,intervalSize)  
+            self.shadow(extendedData,dupLimit,delLimit,intervalSize)
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
-            self.dataList = extendedData    
+            self.dataList = extendedData
 
         elif self.plotType == 1:
-        
+
             coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
             for chunk in coverageChunks:
                 val = sum(chunk) / len(chunk)
@@ -467,21 +404,21 @@ class ChromoPlotWindow(QWidget):
                     val = minCov
                 #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
                 self.coverageData.append(2*val/normValue)
-                
-            #gives the centromere regions the value 2    
+
+            #gives the centromere regions the value 2
             for pos in centromerePos:
                 for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
-                    self.coverageData[index] = 2    
+                    self.coverageData[index] = 2
 
-        
+
             self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm, picker=True)
             xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
             self.dataList = self.coverageData
-            
+
             self.dataX = range(len(self.coverageData))
             self.dataY = self.coverageData
-            
-                
+
+
         #Create an input validator for the manual x range input boxes, range is no of bins
         self.xRangeValidator = QIntValidator(0,len(self.dataList),self)
         self.minXSet.setValidator(self.xRangeValidator)
@@ -499,7 +436,7 @@ class ChromoPlotWindow(QWidget):
         self.canvas.draw()
 
     def shadow(self, data, dupLimit, delLimit, intervalSize):
-    
+
         #code for shadowing
         xFillValuesHigh = []
         xCounterHighStart = 0
@@ -527,21 +464,21 @@ class ChromoPlotWindow(QWidget):
             else:
                 xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
                 xCounterLowStart = xCounter
-                xCounterLowEnd = 0   
+                xCounterLowEnd = 0
     #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
         for values in xFillValuesLow:
             start = values[0]
             stop = values[1]
             if (stop - start) > intervalSize:
-                self.ax.fill_between(range(start, stop), delLimit, data[start:stop], facecolor='r', interpolate=True, edgecolor = 'r')               
+                self.ax.fill_between(range(start, stop), delLimit, data[start:stop], facecolor='r', interpolate=True, edgecolor = 'r')
         for values in xFillValuesHigh:
             start = values[0]
             stop = values[1]
             if (stop - start) > intervalSize:
                 self.ax.fill_between(range(start, stop), dupLimit, data[start:stop], facecolor='g', interpolate = True, edgecolor = 'g')
-        
+
     def getMean(self, data):
-        
+
         #the goal of this function is to increase the amount of data points 10 times
         #to achieve this the mean is taken between two adjacent data points and added to a new list along with the old data points
         #example: [5, 10, 15, 20] -> [5, 7.5, 10, 12.5, 15, 17.5, 20]
@@ -550,33 +487,33 @@ class ChromoPlotWindow(QWidget):
         newDataTemp = []
         newDataMean = []
         extendedData = []
-        
+
         #if data has x data points, newData will have 2x-1
-        for index in range(len(data)):   
+        for index in range(len(data)):
             if index < len(data)-1:
                 newData.append(data[index])
                 newData.append((data[index] + data[index+1])/2)
             else:
-                newData.append(data[index])  
-        
+                newData.append(data[index])
+
         #if data has x data points, newDataTemp will have 2*(2x-1)-1 = 4x-3
-        for index in range(len(newData)):   
+        for index in range(len(newData)):
             if index < len(newData)-1:
                 newDataTemp.append(newData[index])
                 newDataTemp.append((newData[index] + newData[index+1])/2)
             else:
-                newDataTemp.append(newData[index])   
-        
+                newDataTemp.append(newData[index])
+
         #if data has x data points, newDataMean will have 2*(2*(2x-1)-1)-1 = 2*(4x-3)-1 = 8x-7
-        for index in range(len(newDataTemp)):   
+        for index in range(len(newDataTemp)):
             if index < len(newDataTemp)-1:
                 newDataMean.append(newDataTemp[index])
                 newDataMean.append((newDataTemp[index] + newDataTemp[index+1])/2)
             else:
-                newDataMean.append(newDataTemp[index]) 
-                
+                newDataMean.append(newDataTemp[index])
+
         #if data has x data points then, in order to get 10x data points we need to add 2x+7 to 8x-7
-        #this is done by taking the mean 2x+7 times and spacing these out evenly. 
+        #this is done by taking the mean 2x+7 times and spacing these out evenly.
         oldLength = len(data)
         newLength = len(newDataMean)
         spacing = round((newLength / ((2*oldLength)+7)),0)
@@ -587,7 +524,7 @@ class ChromoPlotWindow(QWidget):
                 extendedData.append((newDataMean[index] + newDataMean[index+1])/2)
             else:
                 extendedData.append(newDataMean[index])
-        
+
         return extendedData
 
     def _onMotion(self, event):
@@ -602,12 +539,12 @@ class ChromoPlotWindow(QWidget):
                     annotations.append(annote)
                     collisionFound = True
                     break
-            self.canvas.draw()        
+            self.canvas.draw()
         if not collisionFound:
             for i in range(len(annotations)):
                 annotations[i].set_visible(False)
             self.canvas.draw()
-    
+
     def on_key_press(self, event):
         key_press_handler(event, self.canvas, self.mpl_toolbar)
 
