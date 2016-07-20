@@ -29,6 +29,7 @@ class CoverageView(QGraphicsView):
         self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
+        self.plotType = 0
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
@@ -36,7 +37,7 @@ class CoverageView(QGraphicsView):
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
-        self.initscene()
+        self.initscene(self.chromosomes[0])
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -381,7 +382,18 @@ class CoverageView(QGraphicsView):
             self.scene.addItem(yTickItem)
             self.scene.addItem(yTickLabelItem)
         
-
+        offsetPoint = QPointF(xAxisItem.boundingRect().width()/2, 0)
+        linearGradient = QLinearGradient(QPointF(yAxisItem.boundingRect().bottomLeft()) + offsetPoint, QPointF(yAxisItem.boundingRect().topLeft()) + offsetPoint)
+        linearGradient.setColorAt(1, Qt.green)
+        linearGradient.setColorAt(2.25/10, Qt.green)
+        linearGradient.setColorAt(2.245/10, Qt.black)
+        linearGradient.setColorAt(1.755/10, Qt.black)
+        linearGradient.setColorAt(1.75/10, Qt.red)
+        linearGradient.setColorAt(0, Qt.red)
+        colorBrush = QBrush(linearGradient)
+        colorPen = QPen()
+        colorPen.setBrush(colorBrush)
+        
         for index in range(len(coverageData)):
             if index < len(coverageData)-1:    
                 linePath = QPainterPath()
@@ -390,12 +402,7 @@ class CoverageView(QGraphicsView):
                 linePath.moveTo(startPoint)
                 linePath.lineTo(endPoint)
                 lineItem = QGraphicsPathItem(linePath)
-                # if coverageData[index] < delLimit:
-                    # pointItem.setBrush(QBrush(Qt.red))
-                # elif coverageData[index] > dupLimit:
-                    # pointItem.setBrush(QBrush(Qt.green))
-                # else:
-                    # pointItem.setBrush(QBrush(Qt.black))
+                lineItem.setPen(colorPen)
                 self.scene.addItem(lineItem)
     
     def createScatterPlot(self, chromo):
@@ -474,9 +481,12 @@ class CoverageView(QGraphicsView):
         
         
         
-    def initscene(self):
+    def initscene(self, chromo):
         self.scene.clear()
-        self.createLinePlot(self.chromosomes[0])
+        if self.plotType == 0:
+            self.createScatterPlot(chromo)
+        else:
+            self.createLinePlot(chromo)
         self.update()
         
     def wheelEvent(self,event):
