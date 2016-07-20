@@ -4,11 +4,19 @@ from PySide.QtGui import *
 #Creates and returns data model for variants in given chromosome
 def createVariantInfo(chromo):
     varModel = QStandardItemModel()
-    topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score', 'Active']
+    topstring = ['Active','TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score']
     varModel.setHorizontalHeaderLabels(topstring)
     #Adding variant info to a list
     for variant in chromo.variants:
         infoitem = []
+        #this is a check for displaying a variant or not
+        dispCheckItem = QStandardItem()
+        dispCheckItem.setCheckable(False)
+        if variant[9]:
+            dispCheckItem.setCheckState(Qt.Checked)
+        else:
+            dispCheckItem.setCheckState(Qt.Unchecked)
+        infoitem.append(dispCheckItem)
         #this is event_type in the variant
         infoitem.append(QStandardItem(variant[4]))
         #this is posA in the variant
@@ -37,14 +45,6 @@ def createVariantInfo(chromo):
         infoitem.append(QStandardItem(variant[8]))
         #this is rankscore in the variant
         infoitem.append(QStandardItem(variant[10]))
-        #this is a check for displaying a variant or not
-        dispCheckItem = QStandardItem()
-        dispCheckItem.setCheckable(False)
-        if variant[9]:
-            dispCheckItem.setCheckState(Qt.Checked)
-        else:
-            dispCheckItem.setCheckState(Qt.Unchecked)
-        infoitem.append(dispCheckItem)
         varModel.appendRow(infoitem)
     return varModel
 
@@ -165,23 +165,23 @@ def addVariant(chromo,chromosomes):
 class VariantSortModel(QSortFilterProxyModel):
 
     def sort(self, column, order):
-        if column != 6:
+        if column != 0:
             QSortFilterProxyModel.sort(self,column,order)
 
     #Return true if left less than right, otherwise false
     #left and right are QModelIndexes, taking displayrole data by default
     def lessThan(self, left, right):
-        if left.column() == 0:
+        if left.column() == 1:
             #sort alphabetically by TYPE
             leftData = self.sourceModel().data(left)
             rightData = self.sourceModel().data(right)
             return leftData < rightData
-        elif left.column() == 1:
+        elif left.column() == 2:
             #sort by START as ints
             leftData = int(self.sourceModel().data(left,0))
             rightData = int(self.sourceModel().data(right,0))
             return leftData < rightData
-        elif left.column() == 2:
+        elif left.column() == 3:
             #if the column is 2, i.e. END, see if role 3 data for both items is > 0 (both have chrB)
             #if only one of the items has chrB, put item with chrB as less than
             leftData = self.sourceModel().data(left,1)
@@ -206,12 +206,12 @@ class VariantSortModel(QSortFilterProxyModel):
                 leftData = int(self.sourceModel().data(left,2))
                 rightData = int(self.sourceModel().data(right,2))
                 return leftData < rightData
-        elif left.column() == 3 or left.column() == 4:
+        elif left.column() == 4 or left.column() == 5:
             #sort alphabetically by GENE(S) or CYTOBAND
             leftData = self.sourceModel().data(left)
             rightData = self.sourceModel().data(right)
             return leftData < rightData
-        elif left.column() == 5:
+        elif left.column() == 6:
             #sort by Rank Score. Format is x:y Second value is priority.
             leftData = self.sourceModel().data(left)
             rightData = self.sourceModel().data(right)
@@ -219,4 +219,6 @@ class VariantSortModel(QSortFilterProxyModel):
             rightSecondValue = int(rightData.split(':')[1])
             return leftSecondValue < rightSecondValue
         else:
+            leftData = self.sourceModel().data(left)
+            rightData = self.sourceModel().data(right)
             return leftData < rightData

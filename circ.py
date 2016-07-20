@@ -830,66 +830,6 @@ class CircView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-#Custom class of proxy model to handle custom sorting of variants
-class VariantSortModel(QSortFilterProxyModel):
-
-    def sort(self, column, order):
-        if column != 6:
-            QSortFilterProxyModel.sort(self,column,order)
-
-    #Return true if left less than right, otherwise false
-    #left and right are QModelIndexes, taking displayrole data by default
-    def lessThan(self, left, right):
-        if left.column() == 0:
-            #sort alphabetically by TYPE
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            return leftData < rightData
-        elif left.column() == 1:
-            #sort by START as ints
-            leftData = int(self.sourceModel().data(left,0))
-            rightData = int(self.sourceModel().data(right,0))
-            return leftData < rightData
-        elif left.column() == 2:
-            #if the column is 2, i.e. END, see if role 3 data for both items is > 0 (both have chrB)
-            #if only one of the items has chrB, put item with chrB as less than
-            leftData = self.sourceModel().data(left,1)
-            rightData = self.sourceModel().data(right,1)
-            if leftData != '0' and rightData != '0':
-                #If both are digits (i.e. not X,Y,GL.. etc), compare as ints
-                #If only one is digit put digit chr as the lesser data
-                if leftData.isdigit() and rightData.isdigit():
-                    return int(leftData) < int(rightData)
-                elif leftData.isdigit():
-                    return True
-                elif rightData.isdigit():
-                    return False
-                else:
-                    return leftData < rightData
-            elif leftData != '0':
-                return True
-            elif rightData != '0':
-                return False
-            else:
-                #If no item has chrB, sort by end as an int
-                leftData = int(self.sourceModel().data(left,2))
-                rightData = int(self.sourceModel().data(right,2))
-                return leftData < rightData
-        elif left.column() == 3 or left.column() == 4:
-            #sort alphabetically by GENE(S) or CYTOBAND
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            return leftData < rightData
-        elif left.column() == 5:
-            #sort by Rank Score. Format is x:y Second value is priority.
-            leftData = self.sourceModel().data(left)
-            rightData = self.sourceModel().data(right)
-            leftSecondValue = int(leftData.split(':')[1])
-            rightSecondValue = int(rightData.split(':')[1])
-            return leftSecondValue < rightSecondValue
-        else:
-            return leftData < rightData
-
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
 
