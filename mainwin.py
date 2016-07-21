@@ -442,6 +442,7 @@ class SciVisView(QMainWindow):
             plotTypeBox = QComboBox()
             plotTypeBox.addItem("Plot type: scatter")
             plotTypeBox.addItem("Plot type: line")
+            plotTypeBox.setCurrentIndex(view.plotType)
             plotTypeBox.currentIndexChanged.connect(view.changePlotType)
             self.tools.addAction(showChInfoAct)
             self.tools.addWidget(plotTypeBox)
@@ -602,19 +603,24 @@ class SciVisView(QMainWindow):
         QListWidgetItem("Colors", stackList)
         stackList.currentRowChanged.connect(settingsStack.setCurrentIndex)
         settingsDia = QDialog(self)
+        okButton = QPushButton('Ok', settingsDia)
+        okButton.clicked.connect(self.updateSettings)
+        okButton.clicked.connect(settingsDia.accept)
         applyButton = QPushButton('Apply', settingsDia)
-        applyButton.clicked.connect(settingsDia.accept)
         applyButton.clicked.connect(self.updateSettings)
         settingsLayout.addWidget(stackList,0,0)
         settingsLayout.addWidget(settingsStack,0,1)
-        settingsLayout.addWidget(applyButton,1,0,1,1)
+        settingsLayout.addWidget(okButton,1,0,1,1)
+        settingsLayout.addWidget(applyButton,1,1,1,1)
         settingsDia.setWindowTitle("Settings")
         settingsDia.setLayout(settingsLayout)
         settingsDia.show()
 
     #Should update settings only on apply (currently updates on item change and color pick).
     def updateSettings(self):
-        pass
+        if self.activeScene:
+            view = self.sceneTabs.currentWidget()
+            view.updateSettings()
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()

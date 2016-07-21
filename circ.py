@@ -131,42 +131,37 @@ class CircView(QGraphicsView):
         self.settingsModel.setItem(6,1,showChrNameCheck)
         self.settingsModel.setItem(7,0,showCentromereRegionText)
         self.settingsModel.setItem(7,1,showCentromereRegionCheck)
-        self.settingsModel.itemChanged.connect(self.updateSettings)
 
-    def viewSettings(self):
-        self.settingsList = QTableView()
-        self.settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.settingsList.setShowGrid(False)
-        self.settingsList.horizontalHeader().hide()
-        self.settingsList.verticalHeader().hide()
-        self.settingsList.setModel(self.settingsModel)
-        self.settingsList.setTextElideMode(Qt.ElideNone)
-        self.settingsDia = QDialog(self)
-        self.settingsDia.setWindowTitle("Settings")
-        applyButton = QPushButton('Apply', self.settingsDia)
-        applyButton.clicked.connect(self.settingsDia.accept)
-        self.settingsDia.layout = QGridLayout(self.settingsDia)
-        self.settingsDia.layout.addWidget(self.settingsList,0,0,1,3)
-        self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
-        self.settingsDia.show()
-
-    def updateSettings(self,item):
-        if item.row() == 0:
-            self.bpWindow = item.data(0)
-        if item.row() == 1:
-            self.bpDistanceResolution = item.data(0)
-        if item.row() == 2:
-            self.useCoverageLog = not self.useCoverageLog
-        if item.row() == 3:
-            self.minCoverage = item.data(0)/100
-        if item.row() == 4:
-            self.maxCoverage = item.data(0)/100
-        if item.row() == 5:
-            self.connWidth = item.data(0)
-        if item.row() == 6:
-           self.showChrNames = not self.showChrNames
-        if item.row() == 7:
-           self.showCentromereRegion = not self.showCentromereRegion
+    def updateSettings(self):
+        #Go through every row in the settings model and update accordingly
+        for row in range(self.settingsModel.rowCount()):
+            item = self.settingsModel.item(row,1)
+            if row == 0:
+                self.bpWindow = item.data(0)
+            if row == 1:
+                self.bpDistanceResolution = item.data(0)
+            if row == 2:
+                if item.checkState() == Qt.Checked:
+                    self.useCoverageLog = True
+                else:
+                    self.useCoverageLog = False
+            if row == 3:
+                self.minCoverage = item.data(0)/100
+            if row == 4:
+                self.maxCoverage = item.data(0)/100
+            if row == 5:
+                self.connWidth = item.data(0)
+            if row == 6:
+                if item.checkState() == Qt.Checked:
+                    self.showChrNames = True
+                else:
+                    self.showChrNames = False
+            if row == 7:
+                if item.checkState() == Qt.Checked:
+                    self.showCentromereRegion = True
+                else:
+                    self.showCentromereRegion = False
+        self.initscene()
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
