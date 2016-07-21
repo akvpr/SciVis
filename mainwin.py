@@ -502,8 +502,8 @@ class SciVisView(QMainWindow):
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
-            view.initscene(0)
             self.show()
+            view.setActiveChromosome(0)
 
     #Creates and initializes a new karyotype diagram
     def newKaryogram(self):
@@ -631,4 +631,4 @@ class SciVisView(QMainWindow):
         oldWidget.deleteLater()
         self.dockWidget.updateGeometry()
         if view.type == 'coverage':
-            view.initscene(selectedRow)
+            view.setActiveChromosome(selectedRow)

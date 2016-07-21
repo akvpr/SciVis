@@ -12,12 +12,16 @@ class CoverageView(QGraphicsView):
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.cytoInfo = self.dataDict['cytoTab']
+        self.stainNames = parent.stainNames
+        self.stainColors = parent.stainColors
         self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
         self.dupLimit = 2.25
         self.delLimit = 1.75
         self.plotType = 0
+        self.activeAreaStart = 0
+        self.activeAreaEnd = int(self.chromosomes[0].end)
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
@@ -93,7 +97,7 @@ class CoverageView(QGraphicsView):
                 self.minCoverage = item.data(0)/100
             if row == 4:
                 self.maxCoverage = item.data(0)/100
-        self.initscene(self.activeChromo)
+        self.updatePlot()
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
@@ -208,10 +212,70 @@ class CoverageView(QGraphicsView):
             chromo = self.chromosomes[row]
             common.addVariant(chromo,self.chromosomes)
 
-    def defineRectangles(self):
-        size = self.size()
-        self.viewArea = QRect(QPoint(0,0), QPoint(size.width(),size.height()))
-        self.graphArea = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
+    def createOverview(self,chromo):
+        bandHeight = self.overviewArea.height() / 2
+        chromoWidth = self.overviewArea.width()
+        bandYPos = self.overviewArea.top() + bandHeight/2
+        firstAcen = True
+        #Find each cytoband for this chromosome, and create band items using this data
+        for cyto in self.cytoInfo:
+            if cyto[0] == chromo.name:
+                totalCytoBP = int(cyto[2]) - int(cyto[1])
+                bandXPos = self.overviewArea.left() + (int(cyto[1]) / int(chromo.end)) * chromoWidth
+                bandWidth = (totalCytoBP / int(chromo.end)) * chromoWidth
+                #If first item, round on left
+                if int(cyto[1]) is 0:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setRight(rect.right() + rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,-180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                #If first acen, round on right
+                elif cyto[4] == 'acen' and firstAcen:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                    firstAcen = False
+                #If second acen, round on left
+                elif cyto[4] == 'acen':
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setRight(rect.right() + rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,-180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                #If last item, round on right (i.e. last index in last chr or new chr next on next index)
+                elif self.cytoInfo.index(cyto) == len(self.cytoInfo)-1:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                elif self.cytoInfo[self.cytoInfo.index(cyto)+1][0] != chromo.name:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                else:
+                    #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
+                    bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
+                bandRectItem.setBrush(self.stainColors[cyto[4]])
+                bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
+                self.scene.addItem(bandRectItem)
+                #Add the chromosome name to the left of the area
+                nameItem = QGraphicsTextItem(chromo.name)
+                nameItem.setPos( QPointF(self.overviewArea.left()-20, self.overviewArea.top()+5) )
+                font = QFont()
+                font.setBold(True)
+                nameItem.setFont(font)
+                self.scene.addItem(nameItem)
 
     def createPlot(self,chromo,ptype):
         size = self.size()
@@ -269,7 +333,7 @@ class CoverageView(QGraphicsView):
                 lineItem.setOpacity(0.5)
             self.scene.addItem(lineItem)
             yTickLabelItem = QGraphicsTextItem(str(i))
-            yTickLabelItem.setPos(yTickPath.currentPosition() +  QPointF(-20, -20))
+            yTickLabelItem.setPos(yTickPath.currentPosition() +  QPointF(-20, -10))
             self.scene.addItem(yTickLabelItem)
 
         #Create x ticks to show chromosome position
@@ -327,17 +391,32 @@ class CoverageView(QGraphicsView):
                 lineItem.setPen(colorPen)
                 self.scene.addItem(lineItem)
 
-    def initscene(self, chromoNumber):
-        chromo = self.chromosomes[chromoNumber]
+    def updatePlot(self):
+        chromo = self.chromosomes[self.activeChromo]
         self.scene.clear()
         self.defineRectangles()
+        self.createOverview(chromo)
         self.createPlot(chromo,self.plotType)
+        #self.scene.addRect(self.overviewArea)
+        #self.scene.addRect(self.graphArea)
+        #Put an interactive rectangle to set viewed area. Should use scroll to change viewed area.
+        self.selectorItem = AreaSelectorItem(self.overviewArea)
+        self.scene.addItem(self.selectorItem)
         self.update()
-        self.activeChromo = chromoNumber
+
+    def defineRectangles(self):
+        size = self.size()
+        self.viewArea = QRect(QPoint(0,0), QPoint(size.width(),size.height()))
+        self.overviewArea = QRect(QPoint(50,50), QPoint(size.width()-50,80))
+        self.graphArea = QRect(QPoint(50,120), QPoint(size.width()-50,size.height()-50))
 
     def changePlotType(self,index):
         self.plotType = index
-        self.initscene(self.activeChromo)
+        self.updatePlot()
+
+    def setActiveChromosome(self,chromoNumber):
+        self.activeChromo = chromoNumber
+        self.updatePlot()
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
@@ -346,3 +425,37 @@ class CoverageView(QGraphicsView):
             self.scale(1.1,1.1)
         else:
             QGraphicsView.wheelEvent(self, event)
+
+class AreaSelectorItem(QGraphicsRectItem):
+
+    def __init__(self,rect):
+        super().__init__(rect)
+        self.setAcceptHoverEvents(True)
+        pen = QPen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+
+    def hoverMoveEvent(self,event):
+        xPos = event.pos().x()
+        if (xPos == self.rect().left() or xPos == self.rect().right()):
+            self.setCursor(Qt.SizeHorCursor)
+        else:
+            self.setCursor(Qt.OpenHandCursor)
+        QGraphicsItem.hoverMoveEvent(self,event)
+
+    def mousePressEvent(self,event):
+        self.pressStart = event.pos()
+        if self.cursor().shape() == Qt.OpenHandCursor:
+            self.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self,event):
+        currentRect = self.rect()
+
+    def mouseReleaseEvent(self,event):
+        self.pressRelease = event.pos()
+        self.setCursor(Qt.OpenHandCursor)
+
+        #QGraphicsItem.setCursor() on edges, and inside..
+        #setAcceptedMouseButtons to left
+        #implement mouseMoveEvent?
