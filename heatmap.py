@@ -44,6 +44,7 @@ class HeatmapView(QGraphicsView):
 
     #A dialog window used to gather data from the user (chromA, chromB, binSize)
     def addHeatmap(self):
+        self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
         addDialog = QDialog()
         addDialog.setWindowTitle("Add plot")
         applyButton = QPushButton('Ok', addDialog)
@@ -282,6 +283,7 @@ class HeatmapView(QGraphicsView):
             endString = "End position"
         size = self.size()
         containerRect = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
+        #create and add axes to scene
         xAxisPath = QPainterPath()
         xAxisPath.moveTo(50,containerRect.height()-50)
         xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
@@ -300,18 +302,18 @@ class HeatmapView(QGraphicsView):
         self.scene.addItem(yAxisItem)
         self.scene.addItem(xAxisItemTop)
         self.scene.addItem(yAxisItemRight)
-        
+        #calculate the size of each element
         elementWidth = xAxisItem.boundingRect().width()/xAxis
         elementHeight = yAxisItem.boundingRect().height()/yAxis
-        
+        #
         for xInd in range(xAxis):
             for yInd in range(yAxis):
                 elementPath = QPainterPath()
                 elementPath.addRect(xInd*elementWidth + xAxisItem.boundingRect().left(), yInd*elementHeight + yAxisItem.boundingRect().top(), elementWidth, elementHeight)
                 elementItem = QGraphicsPathItem(elementPath)
-                color = QColor(Qt.red)
-                color = color.darker(105*A[yInd][xInd])
-                colorPen = QPen(QBrush(Qt.red),1)
+                color = QColor(Qt.black)
+                color = color.lighter(150*A[yInd][xInd])
+                colorPen = QPen(QBrush(Qt.black),1)
                 elementItem.setPen(colorPen)
                 elementItem.setBrush(QBrush(color))
                 self.scene.addItem(elementItem)
@@ -354,8 +356,7 @@ class HeatmapView(QGraphicsView):
         
         titleLabel.setScale(2)
         yAxisLabel.setScale(2)
-        xAxisLabel.setScale(2)
-        
+        xAxisLabel.setScale(2)       
         
         yAxisLabel.setRotation(270)
         
