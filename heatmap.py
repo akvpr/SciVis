@@ -16,6 +16,7 @@ from matplotlib.backends.backend_qt4agg import (
 class HeatmapView(QGraphicsView):
 
     def __init__(self,dataDict, parent):
+    
         self.scene = QGraphicsScene()
         self.type = "heatmap"
         super().__init__(self.scene, parent)
@@ -30,7 +31,8 @@ class HeatmapView(QGraphicsView):
         self.bpWindow = 50
         self.minCoverage = 0
         self.maxCoverage = 5
-        
+        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.origin = QPoint(0,0)
         self.binSize = 10000
         self.createSettings()
         self.createChInfo()
@@ -298,6 +300,8 @@ class HeatmapView(QGraphicsView):
         yAxisPath.moveTo(containerRect.width()-250, containerRect.height()-50)
         yAxisPath.lineTo(containerRect.width()-250, 50)
         yAxisItemRight = QGraphicsPathItem(yAxisPath)
+        self.graphArea = QRectF(yAxisItem.boundingRect().topLeft(), xAxisItem.boundingRect().bottomRight())
+        self.scene.addItem(QGraphicsRectItem(self.graphArea))
         self.scene.addItem(xAxisItem)
         self.scene.addItem(yAxisItem)
         self.scene.addItem(xAxisItemTop)
@@ -310,14 +314,48 @@ class HeatmapView(QGraphicsView):
             for yInd in range(yAxis):
                 elementPath = QPainterPath()
                 elementPath.addRect(xInd*elementWidth + xAxisItem.boundingRect().left(), yInd*elementHeight + yAxisItem.boundingRect().top(), elementWidth, elementHeight)
-                elementItem = QGraphicsPathItem(elementPath)
-                color = QColor(Qt.black)
-                color = color.lighter(150*A[yInd][xInd])
-                colorPen = QPen(QBrush(Qt.black),1)
+                elementItem = ElementGraphicItem(elementPath, xInd, yInd)
+                elementItem.setToolTip(str(A[yInd][xInd]))
+                color = QColor(Qt.darkRed)
+                color = color.lighter(105*(1+(A[yInd][xInd])/10))
+                colorPen = QPen(QBrush(Qt.darkRed),1)
                 elementItem.setPen(colorPen)
                 elementItem.setBrush(QBrush(color))
                 self.scene.addItem(elementItem)
                 
+        colorBarPath = QPainterPath()
+        colorBarPath.addRect(xAxisItem.boundingRect().right() + 75, yAxisItem.boundingRect().top(), 50, yAxisItemRight.boundingRect().height())
+        colorBarItem = QGraphicsPathItem(colorBarPath)
+        linearGradient = QLinearGradient(colorBarItem.boundingRect().bottomLeft() + QPointF(25,0), colorBarItem.boundingRect().topLeft() + QPointF(25,0))
+        color = QColor(Qt.darkRed)
+        linearGradient.setColorAt(0, color)
+        linearGradient.setColorAt(1, color.lighter(105*(1+(np.amax(A)/10))))
+        colorBarItem.setBrush(QBrush(linearGradient))
+        self.scene.addItem(colorBarItem)
+        
+        colorBarTick = QPainterPath()
+        lineBetween = QLineF(colorBarItem.boundingRect().bottomRight(), colorBarItem.boundingRect().bottomRight() + QPointF(5,0))
+        colorBarTick.moveTo(lineBetween.pointAt(1))
+        colorBarTick.lineTo(lineBetween.pointAt(0))
+        lineBetween = QLineF(colorBarItem.boundingRect().topRight(), colorBarItem.boundingRect().topRight() + QPointF(5,0))
+        colorBarTick.moveTo(lineBetween.pointAt(1))
+        colorBarTick.lineTo(lineBetween.pointAt(0))
+        colorBarTickItem = QGraphicsPathItem(colorBarTick)
+        colorBarTickLabelTopItem = QGraphicsTextItem(str(np.amax(A)))
+        colorBarTickLabelBottomItem = QGraphicsTextItem(str(np.amin(A)))
+        colorBarTickLabelTopItem.setPos(colorBarItem.boundingRect().topRight() + QPointF(10,-10))
+        colorBarTickLabelBottomItem.setPos(colorBarItem.boundingRect().bottomRight() + QPointF(10,-10))
+        
+        colorBarLabel = QGraphicsTextItem("# of interactions")
+        colorBarLabel.setPos(colorBarItem.boundingRect().bottomRight() + QPointF(20, 20-colorBarItem.boundingRect().height()/2))
+        colorBarLabel.setRotation(270)
+        colorBarLabel.setScale(2)
+        
+        self.scene.addItem(colorBarTickItem)
+        self.scene.addItem(colorBarTickLabelTopItem)
+        self.scene.addItem(colorBarTickLabelBottomItem)
+        self.scene.addItem(colorBarLabel)
+        
         for i in range(xAxis):
             xTickPath = QPainterPath()
             xTickLabel = ""
@@ -385,7 +423,7 @@ class HeatmapView(QGraphicsView):
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
                             if (posConnA >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and posConnA < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and posConnB >= (yAxisStart*binSize + j*binSize*zoomFactor) and posConnB < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
-                                #print((xStart*self.binSize + i*(self.binSize/10)), (xStart*self.binSize + i*self.binSize/10 + self.binSize/10), (yStart*self.binSize + j*self.binSize/10), (yStart*self.binSize + j*self.binSize + self.binSize/10))
+                                #print((xAxisStart*binSize + i*(binSize/10)), (xAxisStart*binSize + i*binSize/10 + binSize/10), (yAxisStart*binSize + j*binSize/10), (yAxisStart*binSize + j*self.binSize + binSize/10))
                                 #print(posConnA, posConnB)
                                 #print(i, j)
                                 B[i][j] = counter
@@ -404,13 +442,10 @@ class HeatmapView(QGraphicsView):
                                 B[i][j] = counter
         B = np.asarray(B)
         B = B.T
-        C =[[0 for j in range(yAxis)] for i in range(xAxis)]
-        C = np.asarray(C)
-        for i in range(yAxis):
-            for j in range(xAxis):
-                C[i][j] = B[yAxis-i-1][j]
-                
-        return C
+        B = np.flipud(B)    
+
+        
+        return B
        
             
     def initscene(self):
@@ -425,3 +460,79 @@ class HeatmapView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
+    def zoomIn(self):
+        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[self.activeIndex][1]
+        B = self.constructMatrix(chromoA, chromoB, mapping, binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY))
+        matrixInfo = [chromoA, chromoB, mapping, binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY)]
+        if self.activeIndex < len(self.matrices)-1:
+            print("len: " + str(len(self.matrices)))
+            for index in range(0,len(self.matrices)-1):
+                print(index)
+                self.matrices.pop()
+        self.matrices.append([B, matrixInfo])
+        self.activeIndex += 1
+        self.updateHeatmap(self.activeIndex)
+        
+    def back(self):
+        if self.activeIndex > 0:
+            self.activeIndex -= 1
+            self.updateHeatmap(self.activeIndex)
+        print(self.activeIndex)
+        
+    def forward(self):
+        if self.activeIndex < len(self.matrices)-1:
+            self.activeIndex += 1
+            self.updateHeatmap(self.activeIndex)
+        print(self.activeIndex)
+        
+    def mousePressEvent(self, event):
+        self.origin = event.globalPos()
+        if self.graphArea.contains(self.origin):
+            print(self.origin)
+            print(self.graphArea.topLeft())
+            if not self.rubberBand:
+                self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+            self.rubberBand.setGeometry(QRect(self.origin, QSize()))
+            self.rubberBand.show()
+        
+    def mouseMoveEvent(self, event):
+        if self.graphArea.contains(self.origin):
+            if self.rubberBand:
+                selectionRect = QRect(self.origin,event.pos()).normalized()
+                self.rubberBand.setGeometry(selectionRect)
+        
+    def mouseReleaseEvent(self, event):
+        if self.graphArea.contains(self.origin):
+            if self.rubberBand:
+                self.rubberBand.hide()
+        
+        
+#Subclass of graphics path item for custom handling of mouse events
+class ElementGraphicItem(QGraphicsPathItem):
+
+    def __init__(self,path,xInd, yInd):
+        super().__init__(path)
+        self.selected = False
+        self.xInd = xInd
+        self.yInd = yInd
+        self.setData(0,"ElementItem")
+        self.setPen(QPen(Qt.black,1))
+
+    #Marks the chromosome item with a blue outline if selected
+    def mark(self):
+        currentPen = self.pen()
+        currentPen.setStyle(Qt.DashLine)
+        currentPen.setBrush(Qt.blue)
+        currentPen.setWidth(3)
+        self.setPen(currentPen)
+        self.selected = True
+
+    def unmark(self):
+        self.setPen(QPen(Qt.black,1))
+        self.selected = False
+
+    #Paints the name of the chromosone in the middle of the item -- possible to implemend changing of font etc if needed
+    #Put this in separate function for more flexible handling of when name is painted?
+    def paint(self,painter,option,widget):
+        super().paint(painter,option,widget)
+        
