@@ -20,13 +20,19 @@ class CoverageView(QGraphicsView):
         self.dupLimit = 2.25
         self.delLimit = 1.75
         self.plotType = 0
-        self.activeAreaStart = 0
-        self.activeAreaEnd = int(self.chromosomes[0].end)
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
         self.setRenderHints(QPainter.Antialiasing)
+
+    def startScene(self):
+        self.defineRectangles()
+        self.activeChromo = 0
+        #Dict for position marker values for chromosomes
+        self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
+        self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea)
+        self.setActiveChromosome(0)
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -392,16 +398,16 @@ class CoverageView(QGraphicsView):
                 self.scene.addItem(lineItem)
 
     def updatePlot(self):
-        chromo = self.chromosomes[self.activeChromo]
-        self.scene.clear()
         self.defineRectangles()
+        chromo = self.chromosomes[self.activeChromo]
+        #self.scene.clear()
+        for item in self.items():
+            if item is not self.selectorItem:
+                self.scene.removeItem(item)
+            else:
+                "select!"
         self.createOverview(chromo)
         self.createPlot(chromo,self.plotType)
-        #self.scene.addRect(self.overviewArea)
-        #self.scene.addRect(self.graphArea)
-        #Put an interactive rectangle to set viewed area. Should use scroll to change viewed area.
-        self.selectorItem = AreaSelectorItem(self.overviewArea)
-        self.scene.addItem(self.selectorItem)
         self.update()
 
     def defineRectangles(self):
@@ -415,8 +421,13 @@ class CoverageView(QGraphicsView):
         self.updatePlot()
 
     def setActiveChromosome(self,chromoNumber):
+        #Before switching, save current marker for this chr
+        self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
         self.activeChromo = chromoNumber
+        rect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
+        self.selectorItem = AreaSelectorItem(rect,self.overviewArea)
         self.updatePlot()
+        self.scene.addItem(self.selectorItem)
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
@@ -426,36 +437,97 @@ class CoverageView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-class AreaSelectorItem(QGraphicsRectItem):
+class AreaSelectorItem(QGraphicsItemGroup):
 
-    def __init__(self,rect):
-        super().__init__(rect)
+    def __init__(self,markRect,fullRect):
+        super().__init__()
+        self.originalRect = QRectF(fullRect)
         self.setAcceptHoverEvents(True)
         pen = QPen()
         pen.setStyle(Qt.DashLine)
         pen.setBrush(Qt.red)
-        self.setPen(pen)
+        self.markRect = QGraphicsRectItem(markRect)
+        self.markRect.setPen(pen)
+        self.addToGroup(self.markRect)
+        #Add some invisible margin so we can get mouse event margin outside edges
+        leftRect = QRectF(self.markRect.rect().topLeft(), self.markRect.rect().bottomLeft())
+        leftRect.setRight(leftRect.right() + 5)
+        leftRect.setLeft(leftRect.left() - 5)
+        self.leftDragItem = QGraphicsRectItem(leftRect)
+        self.leftDragItem.setOpacity(0)
+        self.addToGroup(self.leftDragItem)
+        rightRect = QRectF(self.markRect.rect().topRight(), self.markRect.rect().bottomRight())
+        rightRect.setLeft(rightRect.right() - 5)
+        rightRect.setRight(rightRect.right() + 5)
+        self.rightDragItem = QGraphicsRectItem(rightRect)
+        self.rightDragItem.setOpacity(0)
+        self.addToGroup(self.rightDragItem)
+        self.setAcceptedMouseButtons(Qt.LeftButton)
+        self.draggingLeft = False
+        self.draggingRight = False
+        self.movingRect = False
+
+    def returnMarkerRect(self):
+        return self.markRect.rect()
 
     def hoverMoveEvent(self,event):
-        xPos = event.pos().x()
-        if (xPos == self.rect().left() or xPos == self.rect().right()):
+        if ( self.leftDragItem.contains(event.pos()) or self.rightDragItem.contains(event.pos()) ):
             self.setCursor(Qt.SizeHorCursor)
         else:
             self.setCursor(Qt.OpenHandCursor)
         QGraphicsItem.hoverMoveEvent(self,event)
 
     def mousePressEvent(self,event):
-        self.pressStart = event.pos()
         if self.cursor().shape() == Qt.OpenHandCursor:
             self.setCursor(Qt.ClosedHandCursor)
+            self.movingRect = True
+            self.lastXPos = event.pos().x()
+        if self.leftDragItem.contains(event.pos()):
+            self.draggingLeft = True
+        elif self.rightDragItem.contains(event.pos()):
+            self.draggingRight = True
 
     def mouseMoveEvent(self,event):
-        currentRect = self.rect()
+        xPos = event.pos().x()
+        #Should not be able to be dragged outside of full size boundary,
+        #or too close to selection opposite edge
+        if ( self.draggingLeft and xPos < (self.markRect.rect().right()-10) ):
+            if xPos < self.originalRect.left():
+                xPos = self.originalRect.left()
+            newRect = self.markRect.rect()
+            newRect.setLeft(xPos)
+            self.markRect.setRect(newRect)
+        elif (self.draggingRight and xPos > (self.markRect.rect().left()+10) ):
+            if xPos > self.originalRect.right():
+                xPos = self.originalRect.right()
+            newRect = self.markRect.rect()
+            newRect.setRight(xPos)
+            self.markRect.setRect(newRect)
+        elif self.movingRect:
+            newRect = self.markRect.rect()
+            if self.markRect.rect().left() < self.originalRect.left():
+                translateBy = 0
+                newRect.setX(self.originalRect.left())
+            elif self.markRect.rect().right() > self.originalRect.right():
+                translateBy = 0
+                overshoot = self.markRect.rect().right() - self.originalRect.right()
+                newRect.setX(self.markRect.rect().left() - overshoot)
+            else:
+                translateBy = xPos - self.lastXPos
+            newRect.translate(translateBy,0)
+            self.markRect.setRect(newRect)
+            self.lastXPos = xPos
+
 
     def mouseReleaseEvent(self,event):
         self.pressRelease = event.pos()
         self.setCursor(Qt.OpenHandCursor)
-
-        #QGraphicsItem.setCursor() on edges, and inside..
-        #setAcceptedMouseButtons to left
-        #implement mouseMoveEvent?
+        self.draggingLeft = False
+        self.draggingRight = False
+        self.movingRect = False
+        newRect = self.leftDragItem.rect()
+        newRect.moveLeft(self.markRect.rect().left()-newRect.width()/2)
+        self.leftDragItem.setRect(newRect)
+        newRect = self.rightDragItem.rect()
+        newRect.moveRight(self.markRect.rect().right()+newRect.width()/2)
+        self.rightDragItem.setRect(newRect)
