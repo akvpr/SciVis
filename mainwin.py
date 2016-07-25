@@ -624,11 +624,13 @@ class SciVisView(QMainWindow):
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()
-        selectedRow = selected.indexes()[0].row()
-        varWidget = view.createVariantWidget(selectedRow)
-        self.dockWidget.widget().layout().addWidget(varWidget)
-        oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
-        oldWidget.deleteLater()
-        self.dockWidget.updateGeometry()
-        if view.type == 'coverage':
-            view.setActiveChromosome(selectedRow)
+        selectedInds = selected.indexes()
+        if selectedInds:
+            selectedRow = selectedInds[0].row()
+            varWidget = view.createVariantWidget(selectedRow)
+            self.dockWidget.widget().layout().addWidget(varWidget)
+            oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
+            oldWidget.deleteLater()
+            self.dockWidget.updateGeometry()
+            if view.type == 'coverage':
+                view.setActiveChromosome(selectedRow)

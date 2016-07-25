@@ -25,13 +25,15 @@ class CoverageView(QGraphicsView):
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
         self.setRenderHints(QPainter.Antialiasing)
+        #self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
     def startScene(self):
         self.defineRectangles()
         self.activeChromo = 0
         #Dict for position marker values for chromosomes
         self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
-        self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea)
+        self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
         self.setActiveChromosome(0)
 
     def returnActiveDataset(self):
@@ -283,8 +285,7 @@ class CoverageView(QGraphicsView):
                 nameItem.setFont(font)
                 self.scene.addItem(nameItem)
 
-    def createPlot(self,chromo,ptype):
-        size = self.size()
+    def createPlot(self,chromo,ptype,limits):
         coverageData = []
         normValue = self.coverageNorm
         minCov = normValue*self.minCoverage
@@ -299,6 +300,9 @@ class CoverageView(QGraphicsView):
                 val = minCov
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
+        startIndex = round(limits[0] / int(chromo.end) * len(coverageData))
+        endIndex = round((limits[0] + limits[1]) / int(chromo.end) * len(coverageData))
+        coverageData = coverageData[startIndex:endIndex]
 
         #Draw the y axis
         leftLine = QLineF(self.graphArea.bottomLeft(),self.graphArea.topLeft())
@@ -400,19 +404,32 @@ class CoverageView(QGraphicsView):
     def updatePlot(self):
         self.defineRectangles()
         chromo = self.chromosomes[self.activeChromo]
-        #self.scene.clear()
-        for item in self.items():
-            if item is not self.selectorItem:
-                self.scene.removeItem(item)
-            else:
-                "select!"
+        mRect = self.selectorItem.returnMarkerRect()
+        self.scene.clear()
         self.createOverview(chromo)
-        self.createPlot(chromo,self.plotType)
+        self.createPlot(chromo,self.plotType,self.limits)
+        self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.scene.addItem(self.selectorItem)
+        self.setSceneRect(self.viewArea)
         self.update()
+
+    def updateLimits(self):
+        chromo = self.chromosomes[self.activeChromo]
+        #Find the marked region by looking at marker edges
+        markRect = self.selectorItem.returnMarkerRect()
+        regionStart = round((markRect.left() - self.overviewArea.left()) / self.overviewArea.width() * int(chromo.end))
+        if regionStart < 0:
+            regionStart = 0
+        regionLength = round(markRect.width() / self.overviewArea.width() * int(chromo.end))
+        if regionLength > int(chromo.end):
+            regionLength = int(chromo.end)
+        limits = [regionStart, regionLength]
+        self.limits = limits
+        self.updatePlot()
 
     def defineRectangles(self):
         size = self.size()
-        self.viewArea = QRect(QPoint(0,0), QPoint(size.width(),size.height()))
+        self.viewArea = QRect(QPoint(20,20), QPoint(size.width()-20,size.height()-20))
         self.overviewArea = QRect(QPoint(50,50), QPoint(size.width()-50,80))
         self.graphArea = QRect(QPoint(50,120), QPoint(size.width()-50,size.height()-50))
 
@@ -424,10 +441,11 @@ class CoverageView(QGraphicsView):
         #Before switching, save current marker for this chr
         self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
         self.activeChromo = chromoNumber
-        rect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
-        self.selectorItem = AreaSelectorItem(rect,self.overviewArea)
+        self.limits = [0,int(self.chromosomes[self.activeChromo].end)]
+        mRect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
+        self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.updateLimits()
         self.updatePlot()
-        self.scene.addItem(self.selectorItem)
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
@@ -439,8 +457,9 @@ class CoverageView(QGraphicsView):
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
-    def __init__(self,markRect,fullRect):
+    def __init__(self,markRect,fullRect,parent):
         super().__init__()
+        self.parent = parent
         self.originalRect = QRectF(fullRect)
         self.setAcceptHoverEvents(True)
         pen = QPen()
@@ -507,17 +526,15 @@ class AreaSelectorItem(QGraphicsItemGroup):
             newRect = self.markRect.rect()
             if self.markRect.rect().left() < self.originalRect.left():
                 translateBy = 0
-                newRect.setX(self.originalRect.left())
+                newRect.moveLeft(self.originalRect.left())
             elif self.markRect.rect().right() > self.originalRect.right():
                 translateBy = 0
-                overshoot = self.markRect.rect().right() - self.originalRect.right()
-                newRect.setX(self.markRect.rect().left() - overshoot)
+                newRect.moveRight(self.originalRect.right())
             else:
                 translateBy = xPos - self.lastXPos
             newRect.translate(translateBy,0)
             self.markRect.setRect(newRect)
             self.lastXPos = xPos
-
 
     def mouseReleaseEvent(self,event):
         self.pressRelease = event.pos()
@@ -525,9 +542,19 @@ class AreaSelectorItem(QGraphicsItemGroup):
         self.draggingLeft = False
         self.draggingRight = False
         self.movingRect = False
+        #Make sure marker is not outside of limits
+        newRect = self.markRect.rect()
+        if self.markRect.rect().left() < self.originalRect.left():
+            newRect.moveLeft(self.originalRect.left())
+        elif self.markRect.rect().right() > self.originalRect.right():
+            newRect.moveRight(self.originalRect.right())
+        self.markRect.setRect(newRect)
+        #Place drag margins on edges
         newRect = self.leftDragItem.rect()
         newRect.moveLeft(self.markRect.rect().left()-newRect.width()/2)
         self.leftDragItem.setRect(newRect)
         newRect = self.rightDragItem.rect()
         newRect.moveRight(self.markRect.rect().right()+newRect.width()/2)
         self.rightDragItem.setRect(newRect)
+        #Update the plot on release
+        self.parent.updateLimits()
