@@ -466,8 +466,14 @@ class SciVisView(QMainWindow):
             self.showChInfoAct.triggered.connect(view.showChInfo)
             self.addHeatmapAct = QAction('Add heatmap', self)
             self.addHeatmapAct.triggered.connect(view.addHeatmap)
+            self.backAct = QAction('Back', self)
+            self.backAct.triggered.connect(view.back)
+            self.forwardAct = QAction('Forward', self)
+            self.forwardAct.triggered.connect(view.forward)
             self.tools.addAction(self.showChInfoAct)
             self.tools.addAction(self.addHeatmapAct)
+            self.tools.addAction(self.backAct)
+            self.tools.addAction(self.forwardAct)
             self.tools.show()
 
     #Creates and initializes a new circular diagram
