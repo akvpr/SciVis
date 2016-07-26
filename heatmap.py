@@ -4,6 +4,7 @@ from PySide.QtGui import *
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import numpy as np
+import math
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import key_press_handler
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -264,20 +265,23 @@ class HeatmapView(QGraphicsView):
         binSize = binSize*1000
         self.matrices = []
         self.activeIndex = 0
+        zoomLevel = 0
+        zoomFactor = 10
         xAxis = int(round(int(chromoA.end)/binSize,0))
         yAxis = int(round(int(chromoB.end)/binSize,0))
         
         if not chromoA.connections:
             chromoA.createConnections()
             
-        A = self.constructMatrix(chromoA, chromoB, mapping, binSize, 1, xAxis, yAxis, 0, 0)
-        matrixInfo = [chromoA, chromoB, mapping, binSize, 1, xAxis, yAxis, 0, 0]
+        A = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel)
+        matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel]
         self.matrices.append([A, matrixInfo])
         self.updateHeatmap(self.activeIndex)
         
     def updateHeatmap(self, activeIndex):
         self.clearScene()
-        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[activeIndex][1]
+        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel) = self.matrices[activeIndex][1]
+        zoomFactor = math.pow(zoomFactor, -zoomLevel)
         A = self.matrices[activeIndex][0]
         if mapping == "TLOC":
             startString = "Position"
@@ -312,15 +316,16 @@ class HeatmapView(QGraphicsView):
         #calculate the size of each element
         self.elementWidth = xAxisItem.boundingRect().width()/xAxis
         self.elementHeight = yAxisItem.boundingRect().height()/yAxis
-        #
+
+        #since the y-axis is flipped, y values has an offset of yAxis - yInd - 1
         for xInd in range(xAxis):
             for yInd in range(yAxis):
                 elementPath = QPainterPath()
                 elementPath.addRect(xInd*self.elementWidth + xAxisItem.boundingRect().left(), yInd*self.elementHeight + yAxisItem.boundingRect().top(), self.elementWidth, self.elementHeight)
                 elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd*zoomFactor, yAxisStart + (yAxis - yInd - 1)*zoomFactor)
-                elementItem.setToolTip("(" + str(xAxisStart + xInd*zoomFactor) + ", " + str(yAxisStart + (yAxis - yInd - 1)*zoomFactor) + "): " +   str(A[yInd][xInd]))
+                elementItem.setToolTip("x: " + str((xAxisStart + xInd*zoomFactor)*binSize*1000) + "bp\n" + "y: " + str((yAxisStart + (yAxis - yInd - 1)*zoomFactor)*binSize*1000) + "bp\n" + "#interactions: " +  str(A[yInd][xInd]))
                 color = QColor(Qt.darkRed)
-                color = color.lighter(105*(1+(A[yInd][xInd])/10))
+                color = color.lighter(105*(1+(A[yInd][xInd])/(np.amax(A)+1)))
                 colorPen = QPen(QBrush(Qt.darkRed),1)
                 elementItem.setPen(colorPen)
                 elementItem.setBrush(QBrush(color))
@@ -332,7 +337,7 @@ class HeatmapView(QGraphicsView):
         linearGradient = QLinearGradient(colorBarItem.boundingRect().bottomLeft() + QPointF(25,0), colorBarItem.boundingRect().topLeft() + QPointF(25,0))
         color = QColor(Qt.darkRed)
         linearGradient.setColorAt(0, color)
-        linearGradient.setColorAt(1, color.lighter(105*(1+(np.amax(A)/10))))
+        linearGradient.setColorAt(1, color.lighter(105*(1+(np.amax(A)/(np.amax(A)+1)))))
         colorBarItem.setBrush(QBrush(linearGradient))
         self.scene.addItem(colorBarItem)
         
@@ -366,7 +371,7 @@ class HeatmapView(QGraphicsView):
                 lineBetween = QLineF(xAxisItem.boundingRect().left() + i*self.elementWidth, xAxisItem.boundingRect().bottom(), xAxisItem.boundingRect().left() + i*self.elementWidth, xAxisItem.boundingRect().bottom() + 5)
                 xTickPath.moveTo(lineBetween.pointAt(0))
                 xTickPath.lineTo(lineBetween.pointAt(1))
-                xTickLabel = str(xAxisStart + i*zoomFactor)
+                xTickLabel = str(round((xAxisStart + i*zoomFactor),zoomLevel))
             xTickItem = QGraphicsPathItem(xTickPath)
             xTickLabelItem = QGraphicsTextItem(xTickLabel)
             xTickLabelItem.setPos(xTickPath.currentPosition() + QPointF(-8,5))
@@ -380,7 +385,7 @@ class HeatmapView(QGraphicsView):
                 lineBetween = QLineF(yAxisItem.boundingRect().left(), yAxisItem.boundingRect().bottom() - i*self.elementHeight, yAxisItem.boundingRect().left() - 5, yAxisItem.boundingRect().bottom() - i*self.elementHeight)
                 yTickPath.moveTo(lineBetween.pointAt(0))
                 yTickPath.lineTo(lineBetween.pointAt(1))
-                yTickLabel = str(yAxisStart + i*zoomFactor)
+                yTickLabel = str(round((yAxisStart + i*zoomFactor),zoomLevel))
             yTickItem = QGraphicsPathItem(yTickPath)
             yTickLabelItem = QGraphicsTextItem(yTickLabel)
             yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-25,-10))
@@ -407,7 +412,8 @@ class HeatmapView(QGraphicsView):
         
         
         
-    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart):
+    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel):
+        zoomFactor = math.pow(zoomFactor, -zoomLevel)
         B=[[0 for j in range(yAxis)] for i in range(xAxis)]
         if (mapping == "TLOC"):
             for i in range(xAxis):
@@ -445,8 +451,8 @@ class HeatmapView(QGraphicsView):
                                 B[i][j] = counter
         B = np.asarray(B)
         B = B.T
+        #the QT coordinate system has the origin in the top left corner, the y-axis is therefore flipped upside down to get an origin in the bottom left corner.
         B = np.flipud(B)
-        print()
 
         
         return B
@@ -464,13 +470,21 @@ class HeatmapView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-    def zoomIn(self,zoomFactor, xAxisStart, yAxisStart, xAxis, yAxis):
-        (chromoA, chromoB, mapping, binSize, a, b, c, d, e) = self.matrices[self.activeIndex][1]
-        B = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart)
-        matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart]
+            
+    #Zoom function
+    #takes the argument zoom, which determines if the zoom should be magnified or not
+    #otherwise creates a new matrix B with the magnified values and adds it to the matrices list
+    def zoomIn(self,zoom, xAxisStart, yAxisStart, xAxis, yAxis):
+        (chromoA, chromoB, mapping, binSize, zoomFactor, b, c, d, e, zoomLevel) = self.matrices[self.activeIndex][1]
+        if zoom:
+            zoomLevel += 1
+        B = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel)
+        matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel]
+        #removing matrices with higher index than self.activeIndex if a zoom is started
         if self.activeIndex < len(self.matrices)-1:
-            for index in range(0,len(self.matrices)-1):
+            for index in range(self.activeIndex,len(self.matrices)-1):
                 self.matrices.pop()
+                
         self.matrices.append([B, matrixInfo])
         self.activeIndex += 1
         self.clearScene()
@@ -480,14 +494,15 @@ class HeatmapView(QGraphicsView):
         if self.activeIndex > 0:
             self.activeIndex -= 1
             self.updateHeatmap(self.activeIndex)
-        #print(self.activeIndex)
+        #print("ActiveIndex: " + str(self.activeIndex))
         
     def forward(self):
         if self.activeIndex < len(self.matrices)-1:
             self.activeIndex += 1
             self.updateHeatmap(self.activeIndex)
-        #print(self.activeIndex)
+        #print("ActiveIndex: " + str(self.activeIndex))
         
+    #Creates a selecting rectangle on left click on the graph area    
     def mousePressEvent(self, event):
         self.origin = event.pos()
         if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill):
@@ -496,34 +511,40 @@ class HeatmapView(QGraphicsView):
             self.rubberBand.setGeometry(QRect(self.origin, QSize()))
             self.rubberBand.show()
         
+    #Handles the size of the selecting rectangle on mouse movements
     def mouseMoveEvent(self, event):
         if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill) and self.mapFromScene(self.graphArea.boundingRect()).containsPoint(event.pos(), Qt.OddEvenFill):
             if self.rubberBand.isVisible():
                 self.rubberBand.setGeometry(QRect(self.origin,event.pos()).normalized())
                 selectedItems = self.items(self.rubberBand.geometry())
                 
-        
+    #When the mouse button is released two things can happen
+    #Either the rectangle has selected more than one elements, then the zoom is started without any magnification, origin will be bottomLeft of the rectangle
+    #and will cover the width and height of the rectangle
+    #OR if the rectangle has only selected one element, then the zoom is started with magnification on the selected indices and cover an area 10x10
     def mouseReleaseEvent(self, event):
         if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill):
-            if self.rubberBand.geometry().width() > self.elementWidth:
-                self.rubberBand.hide()
+            self.rubberBand.hide()
+            selectedItems = self.items(self.rubberBand.geometry())
+            itemCounter = 0
+            for item in selectedItems:
+                if item.data(0) == "ElementItem":
+                    itemCounter += 1
+            if itemCounter > 1:
                 yIndices = []
                 xIndices = []
-                selectedItems = self.items(self.rubberBand.geometry())
                 for item in selectedItems:
                     if item.data(0) == "ElementItem":
                         yIndices.append(item.yInd)
                         xIndices.append(item.xInd)
-                self.zoomIn(1, min(xIndices), min(yIndices), max(xIndices)-min(xIndices)+1, max(yIndices)-min(yIndices)+1)
-            elif self.rubberBand.geometry().width() < self.elementWidth:
-                self.rubberBand.hide()
+                self.zoomIn(False, min(xIndices), min(yIndices), int(max(xIndices)-min(xIndices)+1), int(max(yIndices)-min(yIndices)+1))
+            else:
                 selectedItem = self.items(event.pos())
                 for item in selectedItem:
                     if item.data(0) == "ElementItem":
                         xInd = item.xInd
                         yInd = item.yInd
-                print(xInd, yInd)
-                self.zoomIn(0.1, xInd, yInd, 10, 10)
+                self.zoomIn(True, xInd, yInd, 10, 10)
         
 #Subclass of graphics path item for custom handling of mouse events
 class ElementGraphicItem(QGraphicsPathItem):
