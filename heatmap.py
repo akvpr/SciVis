@@ -317,8 +317,8 @@ class HeatmapView(QGraphicsView):
             for yInd in range(yAxis):
                 elementPath = QPainterPath()
                 elementPath.addRect(xInd*self.elementWidth + xAxisItem.boundingRect().left(), yInd*self.elementHeight + yAxisItem.boundingRect().top(), self.elementWidth, self.elementHeight)
-                elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd, yAxisStart + yAxis - yInd - 1)
-                elementItem.setToolTip("(" + str(xAxisStart + xInd*zoomFactor) + ", " + str(yAxisStart + yAxis - yInd*zoomFactor-1) + "): " +   str(A[yInd][xInd]))
+                elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd*zoomFactor, yAxisStart + (yAxis - yInd - 1)*zoomFactor)
+                elementItem.setToolTip("(" + str(xAxisStart + xInd*zoomFactor) + ", " + str(yAxisStart + (yAxis - yInd - 1)*zoomFactor) + "): " +   str(A[yInd][xInd]))
                 color = QColor(Qt.darkRed)
                 color = color.lighter(105*(1+(A[yInd][xInd])/10))
                 colorPen = QPen(QBrush(Qt.darkRed),1)
@@ -522,6 +522,7 @@ class HeatmapView(QGraphicsView):
                     if item.data(0) == "ElementItem":
                         xInd = item.xInd
                         yInd = item.yInd
+                print(xInd, yInd)
                 self.zoomIn(0.1, xInd, yInd, 10, 10)
         
 #Subclass of graphics path item for custom handling of mouse events
