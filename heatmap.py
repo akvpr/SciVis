@@ -14,7 +14,8 @@ class HeatmapView(QGraphicsView):
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.subWindows = []
-        self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
+        #self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
+        self.variantNames = {"BND":"Break end", "DEL":"Deletion", "DUP":"Duplication", "IDUP":"Interspersed duplication", "INS":"Insertion", "INV":"Inversion", "TDUP":"Tandem duplication", "TLOC":"Translocation"}
         self.grid = QGridLayout()
         self.setLayout(self.grid)
         self.resize(QDesktopWidget().availableGeometry(self).size())
@@ -28,13 +29,17 @@ class HeatmapView(QGraphicsView):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.hide()
         self.origin = QPoint(0,0)
-        self.binSize = 10000
+        self.binSize = 5000
+        self.chromoA = self.chromosomes[0]
+        self.chromoB = self.chromosomes[0]
+        self.mapping = "DEL"
         self.createSettings()
         self.createChInfo()
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
         self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -103,6 +108,26 @@ class HeatmapView(QGraphicsView):
             self.createHeatmap(chromoA, chromoB, binSize, mapping)
         return;
 
+    def changeMappingType(self, mapping):
+        self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
+        self.mapping = self.variantNames[mapping]
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        
+    def changeBinsize(self, binSize):
+        self.binSize = int(binSize)
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+    
+    def changeChromoA(self, chromoA):
+        self.chromoA = self.chromosomes[chromoA]
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        
+    def changeChromoB(self, chromoB):
+        self.chromoB = self.chromosomes[chromoB]
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
 
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
