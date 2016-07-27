@@ -7,14 +7,19 @@ import data
 class CoverageView(QWidget):
 
     def __init__(self,dataDict, parent):
+        #Also DragMode scrollHand if in graphArea?
         self.layout = QVBoxLayout()
         self.splitter = QSplitter(parent)
         self.splitter.setOrientation(Qt.Vertical)
         self.mainScene = QGraphicsScene()
         self.mainView = CoverageGraphicsView(self.mainScene)
         self.bedScene = QGraphicsScene()
-        self.bedView = CoverageGraphicsView(self.bedScene)
+        self.bedView = QGraphicsView(self.bedScene)
+        #self.bedView.setInteractive(False)
         self.bedView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.bedView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #Connect the bed view scroll to main view scroll instead
+        self.mainView.horizontalScrollBar().valueChanged.connect(self.bedView.horizontalScrollBar().setValue)
         self.mainView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.mainView.connectZoom(self.bedView)
         self.type = "coverage"
@@ -433,9 +438,15 @@ class CoverageView(QWidget):
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
         self.mainScene.addItem(self.selectorItem)
         self.mainView.setSceneRect(self.viewArea)
+        self.bedView.setSceneRect(self.trackArea)
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
+        #Adding rectangles..
+        self.mainScene.addRect(self.viewArea)
+        self.mainScene.addRect(self.overviewArea)
+        self.mainScene.addRect(self.graphArea)
+        self.bedScene.addRect(self.trackArea)
         self.update()
 
     def updateLimits(self):
@@ -527,7 +538,7 @@ class CoverageGraphicsView(QGraphicsView):
 
     def __init__(self,scene):
         super().__init__(scene)
-        self.connectedView = None
+        self.connectedView = QGraphicsView()
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
@@ -543,7 +554,15 @@ class CoverageGraphicsView(QGraphicsView):
             QGraphicsView.wheelEvent(self, event)
 
     def connectZoom(self,otherView):
+        print(self.maximumViewportSize() )
+        print(otherView.maximumViewportSize() )
         self.connectedView = otherView
+
+    def viewportEvent(self,event):
+        #print(self.horizontalScrollBar().value())
+        #print(self.connectedView.horizontalScrollBar().value())
+        #self.connectedView.ensureVisible()
+        return QAbstractScrollArea.viewportEvent(self,event)
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
