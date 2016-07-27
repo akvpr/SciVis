@@ -201,6 +201,19 @@ class Reader():
     def returnVcfName(self):
         return self.vcfFileName
 
+    #Reads a general tab delimited file (such as a bed file)
+    def readGeneralTab(self, toRead):
+        tabLines = []
+        with open(toRead, 'r') as tab:
+            #Skip first line
+            line = tab.readline()
+            for line in tab:
+                #The fields are as following: #chromosome, startPos, endPos, text
+                fields = line.split('\t')
+                fields[0] = fields[0].replace("chr","").replace("Chr","").replace("CHR","")
+                tabLines.append(fields)
+        return tabLines
+
 class Chromosome():
 
     def __init__(self, name, start):

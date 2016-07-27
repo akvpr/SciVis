@@ -75,6 +75,7 @@ class SciVisView(QMainWindow):
         self.setCentralWidget(self.sceneTabs)
         self.views = []
         self.initDock()
+        self.bedWidget = None
         self.show()
 
     def initDock(self):
@@ -146,6 +147,10 @@ class SciVisView(QMainWindow):
         self.dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.dockWidget.setWidget(mainDockContents)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dockWidget)
+        self.setCorner(Qt.TopLeftCorner,Qt.LeftDockWidgetArea)
+        self.setCorner(Qt.TopRightCorner,Qt.RightDockWidgetArea)
+        self.setCorner(Qt.BottomLeftCorner,Qt.LeftDockWidgetArea)
+        self.setCorner(Qt.BottomRightCorner,Qt.RightDockWidgetArea)
 
     def dockTabChanged(self):
         pass
@@ -444,7 +449,10 @@ class SciVisView(QMainWindow):
             plotTypeBox.addItem("Plot type: line")
             plotTypeBox.setCurrentIndex(view.plotType)
             plotTypeBox.currentIndexChanged.connect(view.changePlotType)
+            addBedAct = QAction('Bed',self)
+            addBedAct.triggered.connect(view.addBed)
             self.tools.addAction(showChInfoAct)
+            self.tools.addAction(addBedAct)
             self.tools.addWidget(plotTypeBox)
             self.tools.show()
         if viewType == "karyogram":
@@ -507,8 +515,9 @@ class SciVisView(QMainWindow):
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
-            self.show()
             view.startScene()
+            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(0)
+            self.show()
 
     #Creates and initializes a new karyotype diagram
     def newKaryogram(self):

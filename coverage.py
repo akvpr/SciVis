@@ -2,15 +2,31 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 import math
 import common
+import data
 
-class CoverageView(QGraphicsView):
+class CoverageView(QWidget):
 
     def __init__(self,dataDict, parent):
-        self.scene = QGraphicsScene()
+        #Also DragMode scrollHand if in graphArea?
+        self.layout = QVBoxLayout()
+        self.splitter = QSplitter(parent)
+        self.splitter.setOrientation(Qt.Vertical)
+        self.mainScene = QGraphicsScene()
+        self.mainView = CoverageGraphicsView(self.mainScene)
+        self.bedScene = QGraphicsScene()
+        self.bedView = QGraphicsView(self.bedScene)
+        #self.bedView.setInteractive(False)
+        self.bedView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.bedView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #Connect the bed view scroll to main view scroll instead
+        self.mainView.horizontalScrollBar().valueChanged.connect(self.bedView.horizontalScrollBar().setValue)
+        self.mainView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.mainView.connectZoom(self.bedView)
         self.type = "coverage"
-        super().__init__(self.scene, parent)
+        super().__init__(parent)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
         self.stainNames = parent.stainNames
         self.stainColors = parent.stainColors
@@ -24,9 +40,16 @@ class CoverageView(QGraphicsView):
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
-        self.setRenderHints(QPainter.Antialiasing)
-        #self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        #self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        #Initialize a dict with an empty list for each chromosome
+        self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
+        self.mainView.setRenderHints(QPainter.Antialiasing)
+        self.splitter.addWidget(self.mainView)
+        self.splitter.addWidget(self.bedView)
+        #Set initial size of bed area in splitter to 0 (not showing)
+        splitterSizes = self.splitter.sizes()
+        self.splitter.setSizes([splitterSizes[0],0])
+        self.layout.addWidget(self.splitter)
+        self.setLayout(self.layout)
 
     def startScene(self):
         self.defineRectangles()
@@ -34,7 +57,6 @@ class CoverageView(QGraphicsView):
         #Dict for position marker values for chromosomes
         self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
         self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
-        self.setActiveChromosome(0)
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -276,14 +298,14 @@ class CoverageView(QGraphicsView):
                     bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                 bandRectItem.setBrush(self.stainColors[cyto[4]])
                 bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
-                self.scene.addItem(bandRectItem)
+                self.mainScene.addItem(bandRectItem)
                 #Add the chromosome name to the left of the area
                 nameItem = QGraphicsTextItem(chromo.name)
                 nameItem.setPos( QPointF(self.overviewArea.left()-20, self.overviewArea.top()+5) )
                 font = QFont()
                 font.setBold(True)
                 nameItem.setFont(font)
-                self.scene.addItem(nameItem)
+                self.mainScene.addItem(nameItem)
 
     def createPlot(self,chromo,ptype,limits):
         coverageData = []
@@ -307,8 +329,8 @@ class CoverageView(QGraphicsView):
         #Draw the y axis
         leftLine = QLineF(self.graphArea.bottomLeft(),self.graphArea.topLeft())
         rightLine = QLineF(self.graphArea.bottomRight(),self.graphArea.topRight())
-        self.scene.addLine(leftLine)
-        self.scene.addLine(rightLine)
+        self.mainScene.addLine(leftLine)
+        self.mainScene.addLine(rightLine)
         #Set increments for axes
         yAxisIncrement = self.graphArea.height() / (self.maxCoverage*2)
         xAxisIncrement = self.graphArea.width() / 10
@@ -324,8 +346,8 @@ class CoverageView(QGraphicsView):
         delLineItem = QGraphicsLineItem(delLine)
         delLineItem.setPen(QPen(Qt.darkRed))
         delLineItem.setOpacity(0.6)
-        self.scene.addItem(dupLineItem)
-        self.scene.addItem(delLineItem)
+        self.mainScene.addItem(dupLineItem)
+        self.mainScene.addItem(delLineItem)
 
         #Create y ticks (as times average genome coverage), also height markers
         markerPen = QPen()
@@ -341,10 +363,10 @@ class CoverageView(QGraphicsView):
             if not(i == 0 or i == self.maxCoverage*2):
                 lineItem.setPen(markerPen)
                 lineItem.setOpacity(0.5)
-            self.scene.addItem(lineItem)
+            self.mainScene.addItem(lineItem)
             yTickLabelItem = QGraphicsTextItem(str(i))
             yTickLabelItem.setPos(yTickPath.currentPosition() +  QPointF(-20, -10))
-            self.scene.addItem(yTickLabelItem)
+            self.mainScene.addItem(yTickLabelItem)
 
         #Create x ticks to show chromosome position
         bpIncrement = float(chromo.end)/10
@@ -354,11 +376,11 @@ class CoverageView(QGraphicsView):
             line.setP1(point)
             line.setP2(point + QPointF(0,15))
             lineItem = QGraphicsLineItem(line)
-            self.scene.addItem(lineItem)
+            self.mainScene.addItem(lineItem)
             bpPosition = i*bpIncrement
             xTickLabelItem = QGraphicsTextItem(str(round(bpPosition)))
             xTickLabelItem.setPos(point +  QPointF(0, 0))
-            self.scene.addItem(xTickLabelItem)
+            self.mainScene.addItem(xTickLabelItem)
 
         #Place the actual data values on the graph
         if ptype == 0:
@@ -373,7 +395,7 @@ class CoverageView(QGraphicsView):
                     pointItem.setBrush(QBrush(Qt.green))
                 else:
                     pointItem.setBrush(QBrush(Qt.black))
-                self.scene.addItem(pointItem)
+                self.mainScene.addItem(pointItem)
 
         elif ptype == 1:
 
@@ -399,18 +421,32 @@ class CoverageView(QGraphicsView):
                 line = QLineF(startPoint, endPoint)
                 lineItem = QGraphicsLineItem(line)
                 lineItem.setPen(colorPen)
-                self.scene.addItem(lineItem)
+                self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
         self.defineRectangles()
         chromo = self.chromosomes[self.activeChromo]
+        #Save position and size of current chromosome marker before clearing
         mRect = self.selectorItem.returnMarkerRect()
-        self.scene.clear()
+        self.mainScene.clear()
+        self.bedScene.clear()
+        #Create position overview item
         self.createOverview(chromo)
+        #Plot coverage
         self.createPlot(chromo,self.plotType,self.limits)
+        #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
-        self.scene.addItem(self.selectorItem)
-        self.setSceneRect(self.viewArea)
+        self.mainScene.addItem(self.selectorItem)
+        self.mainView.setSceneRect(self.viewArea)
+        self.bedView.setSceneRect(self.trackArea)
+        #If this chromosome has any bed tracks, add these
+        if self.bedDict[chromo.name]:
+            self.addTracks(chromo)
+        #Adding rectangles..
+        self.mainScene.addRect(self.viewArea)
+        self.mainScene.addRect(self.overviewArea)
+        self.mainScene.addRect(self.graphArea)
+        self.bedScene.addRect(self.trackArea)
         self.update()
 
     def updateLimits(self):
@@ -425,13 +461,13 @@ class CoverageView(QGraphicsView):
             regionLength = int(chromo.end)
         limits = [regionStart, regionLength]
         self.limits = limits
-        self.updatePlot()
 
     def defineRectangles(self):
         size = self.size()
-        self.viewArea = QRect(QPoint(20,20), QPoint(size.width()-20,size.height()-20))
+        self.viewArea = QRect(QPoint(30,30), QPoint(size.width()-30,size.height()-30))
         self.overviewArea = QRect(QPoint(50,50), QPoint(size.width()-50,80))
         self.graphArea = QRect(QPoint(50,120), QPoint(size.width()-50,size.height()-50))
+        self.trackArea = QRectF(0,0,self.graphArea.width(),50)
 
     def changePlotType(self,index):
         self.plotType = index
@@ -447,13 +483,86 @@ class CoverageView(QGraphicsView):
         self.updateLimits()
         self.updatePlot()
 
+    def addTracks(self,chromo):
+        self.defineRectangles()
+        self.updateLimits()
+        #Increase size of bed area in splitter to 100 if not showing
+        splitterSizes = self.splitter.sizes()
+        if splitterSizes[1] == 0:
+            self.splitter.setSizes([splitterSizes[0],100])
+        itemHeight = 15
+        itemY = self.trackArea.top()
+        maxLength = self.trackArea.width()
+        viewedBp = self.limits[1]
+        for bedLines in self.bedDict[chromo.name]:
+            for line in bedLines:
+                if int(line[1]) >= self.limits[0] and int(line[2]) <= self.limits[1]+self.limits[0]:
+                    itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
+                    itemWidth = (int(line[2])-int(line[1])) / (viewedBp) * maxLength
+                    rect = QRectF(itemStart,itemY,itemWidth,itemHeight)
+                    #Only display items that are larger than 1 px(?) wide
+                    if rect.width() > 1:
+                        rectItem = QGraphicsRectItem(rect)
+                        rectItem.setBrush(Qt.green)
+                        self.bedScene.addItem(rectItem)
+            itemY += itemHeight+10
+
+    #Reads a bed file and adds a list of bed elements for each chromosome
+    def addBed(self):
+        #Construct a dict to contain all relevant lines for each chromosome
+        #Each line should have final format [bed,start,end,text1...]
+        newBedList = {}
+        bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
+        "bed files (*.bed)")[0]
+        if bedFile:
+            reader = data.Reader()
+            bedLines = reader.readGeneralTab(bedFile)
+            bedFileName = bedFile.split('/')[-1].replace('.bed','')
+            for line in bedLines:
+                chrName = line[0]
+                #If this is a new chrName, construct empty list
+                if not chrName in newBedList:
+                    newBedList[chrName] = []
+                #Add the bed name as first element to identify this list, remove chr field
+                lineElements = [bedFileName]
+                line.pop(0)
+                lineElements.extend(line)
+                newBedList[chrName].append(lineElements)
+            #For each constructed list, search for appropriate chromosome to insert into
+            for key in newBedList.keys():
+                if key in self.bedDict.keys():
+                    self.bedDict[key].append(newBedList[key])
+            self.updatePlot()
+
+class CoverageGraphicsView(QGraphicsView):
+
+    def __init__(self,scene):
+        super().__init__(scene)
+        self.connectedView = QGraphicsView()
+
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)
+            if self.connectedView:
+                #The connected view is supposed to be a track view, only scale in x
+                self.connectedView.scale(0.9,1)
         elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
             self.scale(1.1,1.1)
+            if self.connectedView:
+                self.connectedView.scale(1.1,1)
         else:
             QGraphicsView.wheelEvent(self, event)
+
+    def connectZoom(self,otherView):
+        print(self.maximumViewportSize() )
+        print(otherView.maximumViewportSize() )
+        self.connectedView = otherView
+
+    def viewportEvent(self,event):
+        #print(self.horizontalScrollBar().value())
+        #print(self.connectedView.horizontalScrollBar().value())
+        #self.connectedView.ensureVisible()
+        return QAbstractScrollArea.viewportEvent(self,event)
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
@@ -558,3 +667,4 @@ class AreaSelectorItem(QGraphicsItemGroup):
         self.rightDragItem.setRect(newRect)
         #Update the plot on release
         self.parent.updateLimits()
+        self.parent.updatePlot()
