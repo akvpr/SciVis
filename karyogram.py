@@ -53,6 +53,8 @@ class KaryogramView(QGraphicsView):
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
+        #self.stainColors = self.stainColors
+        self.updateItems()
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:

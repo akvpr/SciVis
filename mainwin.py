@@ -398,8 +398,8 @@ class SciVisView(QMainWindow):
         view = self.sceneTabs.currentWidget()
         #Remove current toolbar and close open windows for last open view
         try:
-            self.lastActiveView.closeOpenWindows()
             self.removeToolBar(self.tools)
+            self.lastActiveView.closeOpenWindows()
             self.tools.hide()
             self.tools.deleteLater()
         except:
@@ -542,8 +542,8 @@ class SciVisView(QMainWindow):
 
     def createColorModel(self):
         #Model allowing stain colors to be changed globally
-        self.stainNames = ['acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
-        self.stainColors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
+        self.stainNames = ['heatmapColor', 'acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
+        self.stainColors = {'heatmapColor':Qt.darkRed, 'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
         'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
         self.colorModel = QStandardItemModel()
         stainItems = []

@@ -1,18 +1,8 @@
 import common
 from PySide.QtCore import *
 from PySide.QtGui import *
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import numpy as np
 import math
-from matplotlib.figure import Figure
-from matplotlib.backend_bases import key_press_handler
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
-from matplotlib.backends.backend_qt4agg import (
-    FigureCanvasQTAgg as FigureCanvas,
-    NavigationToolbar2QT as NavigationToolbar)
-
 
 class HeatmapView(QGraphicsView):
 
@@ -32,6 +22,9 @@ class HeatmapView(QGraphicsView):
         self.bpWindow = 50
         self.minCoverage = 0
         self.maxCoverage = 5
+        self.stainColors = parent.stainColors
+        self.activeIndex = 0
+        self.color = QColor(self.stainColors['heatmapColor'])
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.hide()
         self.origin = QPoint(0,0)
@@ -126,12 +119,17 @@ class HeatmapView(QGraphicsView):
         self.settingsModel.setItem(0,1,maxColumnsData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
+    def closeOpenWindows(self):
+        try:
+            self.chDia.close()
+        except:
+            pass
+        
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
-        for row in range(self.settingsModel.rowCount()):
-            item = self.settingsModel.item(row,1)
-            if row == 0:
-                self.maxColumns = item.data(0)
+        self.color = QColor(self.stainColors['heatmapColor'])
+        self.clearScene()
+        self.updateHeatmap(self.activeIndex)
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
@@ -310,20 +308,20 @@ class HeatmapView(QGraphicsView):
                 elementPath.addRect(xInd*self.elementWidth + xAxisItem.boundingRect().left(), yInd*self.elementHeight + yAxisItem.boundingRect().top(), self.elementWidth, self.elementHeight)
                 elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd*zoomFactor, yAxisStart + (yAxis - yInd - 1)*zoomFactor)
                 elementItem.setToolTip("x: " + str((xAxisStart + xInd*zoomFactor)*binSize*1000) + "bp\n" + "y: " + str((yAxisStart + (yAxis - yInd - 1)*zoomFactor)*binSize*1000) + "bp\n" + "#interactions: " +  str(A[yInd][xInd]))
-                color = QColor(Qt.darkRed)
-                color = color.lighter(105*(1+(A[yInd][xInd])/(np.amax(A)+1)))
-                colorPen = QPen(QBrush(Qt.darkRed),1)
+                color = self.color.lighter(105*(1+(A[yInd][xInd])/(np.amax(A)+1)))
+                colorPen = QPen(QBrush(self.color),1)
                 elementItem.setPen(colorPen)
                 elementItem.setBrush(QBrush(color))
                 self.scene.addItem(elementItem)
 
+        #Creates a colorbar
+        #uses a gradient which goes from self.color at 0 interactions to the darkest color on the heatmap for max interactions
         colorBarPath = QPainterPath()
         colorBarPath.addRect(xAxisItem.boundingRect().right() + 75, yAxisItem.boundingRect().top(), 50, yAxisItemRight.boundingRect().height())
         colorBarItem = QGraphicsPathItem(colorBarPath)
         linearGradient = QLinearGradient(colorBarItem.boundingRect().bottomLeft() + QPointF(25,0), colorBarItem.boundingRect().topLeft() + QPointF(25,0))
-        color = QColor(Qt.darkRed)
-        linearGradient.setColorAt(0, color)
-        linearGradient.setColorAt(1, color.lighter(105*(1+(np.amax(A)/(np.amax(A)+1)))))
+        linearGradient.setColorAt(0, self.color)
+        linearGradient.setColorAt(1, self.color.lighter(105*(1+(np.amax(A)/(np.amax(A)+1)))))
         colorBarItem.setBrush(QBrush(linearGradient))
         self.scene.addItem(colorBarItem)
 
@@ -541,7 +539,7 @@ class ElementGraphicItem(QGraphicsPathItem):
         self.xInd = xInd
         self.yInd = yInd
         self.setData(0,"ElementItem")
-        self.setPen(QPen(Qt.darkRed,1))
+        #self.setPen(QPen(Qt.darkRed,1))
 
     #Marks the chromosome item with a blue outline if selected
     def mark(self):
