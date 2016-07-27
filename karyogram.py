@@ -51,26 +51,12 @@ class KaryogramView(QGraphicsView):
         self.settingsModel.setItem(0,1,itemsPerRowData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
-    def updateSettings(self,item):
-        if item.row() == 0:
-            self.itemsPerRow = item.data(0)
-
-    def viewSettings(self):
-        self.settingsList = QTableView()
-        self.settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.settingsList.setShowGrid(False)
-        self.settingsList.horizontalHeader().hide()
-        self.settingsList.verticalHeader().hide()
-        self.settingsList.setModel(self.settingsModel)
-        self.settingsList.setTextElideMode(Qt.ElideNone)
-        self.settingsDia = QDialog(self)
-        self.settingsDia.setWindowTitle("Settings")
-        applyButton = QPushButton('Apply', self.settingsDia)
-        applyButton.clicked.connect(self.settingsDia.accept)
-        self.settingsDia.layout = QGridLayout(self.settingsDia)
-        self.settingsDia.layout.addWidget(self.settingsList,0,0,1,3)
-        self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
-        self.settingsDia.show()
+    def updateSettings(self):
+        #Go through every row in the settings model and update accordingly
+        for row in range(self.settingsModel.rowCount()):
+            item = self.settingsModel.item(row,1)
+            if row == 0:
+                self.itemsPerRow = item.data(0)
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
