@@ -462,15 +462,20 @@ class SciVisView(QMainWindow):
             self.tools.show()
         if viewType == "heatmap":
             self.tools = self.addToolBar('Coverage tools')
-            showChInfoAct = QAction('Chromosomes',self)
-            showChInfoAct.triggered.connect(view.subview.showChInfo)
-            addHeatmapAct = QAction('Add heatmap', self)
-            addHeatmapAct.triggered.connect(view.subview.addHeatmap)
-            updateLayoutAct = QAction('Update layout', self)
-            updateLayoutAct.triggered.connect(view.subview.arrangePlots)
-            self.tools.addAction(showChInfoAct)
-            self.tools.addAction(addHeatmapAct)
-            self.tools.addAction(updateLayoutAct)
+            self.showChInfoAct = QAction('Chromosomes',self)
+            self.showChInfoAct.triggered.connect(view.showChInfo)
+            self.addHeatmapAct = QAction('Add heatmap', self)
+            self.addHeatmapAct.triggered.connect(view.addHeatmap)
+            self.backAct = QAction('Back', self)
+            self.backAct.setShortcut(QKeySequence(Qt.Key_Left))
+            self.backAct.triggered.connect(view.back)
+            self.forwardAct = QAction('Forward', self)
+            self.forwardAct.setShortcut(QKeySequence(Qt.Key_Right))
+            self.forwardAct.triggered.connect(view.forward)
+            self.tools.addAction(self.showChInfoAct)
+            self.tools.addAction(self.addHeatmapAct)
+            self.tools.addAction(self.backAct)
+            self.tools.addAction(self.forwardAct)
             self.tools.show()
 
     #Creates and initializes a new circular diagram
@@ -529,7 +534,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = heatmap.HeatmapScrollArea(selectedData,self)
+            view = heatmap.HeatmapView(selectedData,self)
             self.views.append(view)
             tabIndex = self.sceneTabs.addTab(view,"Heatmap")
             self.sceneTabs.setCurrentIndex(tabIndex)
