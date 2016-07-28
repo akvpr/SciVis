@@ -11,17 +11,17 @@ class CoverageView(QWidget):
         self.layout = QVBoxLayout()
         self.splitter = QSplitter(parent)
         self.splitter.setOrientation(Qt.Vertical)
-        self.mainScene = QGraphicsScene()
-        self.mainView = CoverageGraphicsView(self.mainScene)
+        self.overviewScene = QGraphicsScene()
+        self.overviewView = QGraphicsView(self.overviewScene)
         self.bedScene = QGraphicsScene()
-        self.bedView = QGraphicsView(self.bedScene)
-        #self.bedView.setInteractive(False)
+        self.bedView = BedGraphicsView(self.bedScene)
         self.bedView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.bedView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.mainScene = QGraphicsScene()
+        self.mainView = CoverageGraphicsView(self.mainScene,self.bedView,self)
         #Connect the bed view scroll to main view scroll instead
         self.mainView.horizontalScrollBar().valueChanged.connect(self.bedView.horizontalScrollBar().setValue)
         self.mainView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.mainView.connectZoom(self.bedView)
         self.type = "coverage"
         super().__init__(parent)
         self.dataDict = dataDict
@@ -43,12 +43,16 @@ class CoverageView(QWidget):
         #Initialize a dict with an empty list for each chromosome
         self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
         self.mainView.setRenderHints(QPainter.Antialiasing)
+        self.overviewView.setRenderHints(QPainter.Antialiasing)
         self.splitter.addWidget(self.mainView)
         self.splitter.addWidget(self.bedView)
         #Set initial size of bed area in splitter to 0 (not showing)
         splitterSizes = self.splitter.sizes()
         self.splitter.setSizes([splitterSizes[0],0])
+        self.layout.addWidget(self.overviewView)
         self.layout.addWidget(self.splitter)
+        self.layout.setStretch(0,0)
+        self.layout.setStretch(1,1)
         self.setLayout(self.layout)
 
     def startScene(self):
@@ -298,14 +302,14 @@ class CoverageView(QWidget):
                     bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                 bandRectItem.setBrush(self.stainColors[cyto[4]])
                 bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
-                self.mainScene.addItem(bandRectItem)
+                self.overviewScene.addItem(bandRectItem)
                 #Add the chromosome name to the left of the area
                 nameItem = QGraphicsTextItem(chromo.name)
                 nameItem.setPos( QPointF(self.overviewArea.left()-20, self.overviewArea.top()+5) )
                 font = QFont()
                 font.setBold(True)
                 nameItem.setFont(font)
-                self.mainScene.addItem(nameItem)
+                self.overviewScene.addItem(nameItem)
 
     def createPlot(self,chromo,ptype,limits):
         coverageData = []
@@ -430,24 +434,36 @@ class CoverageView(QWidget):
         mRect = self.selectorItem.returnMarkerRect()
         self.mainScene.clear()
         self.bedScene.clear()
+        self.overviewScene.clear()
         #Create position overview item
         self.createOverview(chromo)
         #Plot coverage
         self.createPlot(chromo,self.plotType,self.limits)
         #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
-        self.mainScene.addItem(self.selectorItem)
-        self.mainView.setSceneRect(self.viewArea)
-        self.bedView.setSceneRect(self.trackArea)
+        self.overviewScene.addItem(self.selectorItem)
+        self.bedView.setSceneRect(self.trackViewArea)
+        self.overviewView.setSceneRect(self.overviewArea)
+        self.mainView.setSceneRect(self.fitArea)
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
-        #Adding rectangles..
-        self.mainScene.addRect(self.viewArea)
-        self.mainScene.addRect(self.overviewArea)
-        self.mainScene.addRect(self.graphArea)
-        self.bedScene.addRect(self.trackArea)
         self.update()
+
+    def defineRectangles(self):
+        size = self.mainView.size()
+        self.centerArea = QRectF(0,0,size.width(),size.height())
+        offsetPoint = QPointF(10,20)
+        self.fitArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
+        offsetPoint = QPointF(50,50)
+        self.graphArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
+        self.overviewArea = QRect(self.graphArea.left(),0,self.graphArea.width(),30)
+        self.trackArea = QRectF(self.graphArea.left(),0,self.graphArea.width(),50)
+        self.trackViewArea = QRectF(self.centerArea.left(),0,self.centerArea.width(),50)
+
+    def changePlotType(self,index):
+        self.plotType = index
+        self.updatePlot()
 
     def updateLimits(self):
         chromo = self.chromosomes[self.activeChromo]
@@ -461,17 +477,6 @@ class CoverageView(QWidget):
             regionLength = int(chromo.end)
         limits = [regionStart, regionLength]
         self.limits = limits
-
-    def defineRectangles(self):
-        size = self.size()
-        self.viewArea = QRect(QPoint(30,30), QPoint(size.width()-30,size.height()-30))
-        self.overviewArea = QRect(QPoint(50,50), QPoint(size.width()-50,80))
-        self.graphArea = QRect(QPoint(50,120), QPoint(size.width()-50,size.height()-50))
-        self.trackArea = QRectF(0,0,self.graphArea.width(),50)
-
-    def changePlotType(self,index):
-        self.plotType = index
-        self.updatePlot()
 
     def setActiveChromosome(self,chromoNumber):
         #Before switching, save current marker for this chr
@@ -534,35 +539,41 @@ class CoverageView(QWidget):
                     self.bedDict[key].append(newBedList[key])
             self.updatePlot()
 
+#Handles events for main graph area
 class CoverageGraphicsView(QGraphicsView):
 
-    def __init__(self,scene):
+    def __init__(self,scene,otherView,parent):
         super().__init__(scene)
-        self.connectedView = QGraphicsView()
+        #Takes another view to which commands are propagated
+        self.connectedView = otherView
+        self.parent = parent
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)
-            if self.connectedView:
-                #The connected view is supposed to be a track view, only scale in x
-                self.connectedView.scale(0.9,1)
+            self.connectedView.scale(0.9,1)
+            self.connectedView.horizontalScrollBar().setValue(self.horizontalScrollBar().value())
         elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
             self.scale(1.1,1.1)
-            if self.connectedView:
-                self.connectedView.scale(1.1,1)
+            self.connectedView.scale(1.1,1)
+            self.connectedView.horizontalScrollBar().setValue(self.horizontalScrollBar().value())
         else:
             QGraphicsView.wheelEvent(self, event)
 
-    def connectZoom(self,otherView):
-        print(self.maximumViewportSize() )
-        print(otherView.maximumViewportSize() )
-        self.connectedView = otherView
+#Graphics view for bed tracks, with disabled events
+class BedGraphicsView(QGraphicsView):
 
-    def viewportEvent(self,event):
-        #print(self.horizontalScrollBar().value())
-        #print(self.connectedView.horizontalScrollBar().value())
-        #self.connectedView.ensureVisible()
-        return QAbstractScrollArea.viewportEvent(self,event)
+    def __init__(self,scene):
+        super().__init__(scene)
+
+    def mouseMoveEvent(self,event):
+        pass
+
+    def wheelEvent(self,event):
+        pass
+
+    def mousePressEvent(self,event):
+        pass
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
