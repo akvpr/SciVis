@@ -28,15 +28,15 @@ def createVariantInfo(chromo):
         if variant[0] is not variant[2]:
             endText = str(variant[2]) + ": " + str(variant[3])
             endItem = QStandardItem()
-            #if chrB, set this as data with role 1, end as role 2
-            endItem.setData(variant[2],1)
-            endItem.setData(variant[3],2)
+            #if chrB, set this as data with role 32, end as role 33
+            endItem.setData(variant[2],32)
+            endItem.setData(variant[3],33)
         else:
             endText = str(variant[3])
             endItem = QStandardItem()
-            #if no chrB, set 0 as role 1, end as role 2
-            endItem.setData(str(0),1)
-            endItem.setData(variant[3],2)
+            #if no chrB, set 0 as role 32, end as role 33
+            endItem.setData(str(0),32)
+            endItem.setData(variant[3],33)
         endItem.setData(endText,Qt.DisplayRole)
         infoitem.append(endItem)
         #this is allGenes in the variant
@@ -114,6 +114,19 @@ def toggleVariants(chromo, varView):
             chromo.variants[row][9] = True
     chromo.createConnections()
 
+#Toggles individual variants on and off
+def returnVariants(chromo, varView):
+    selectedProxyIndexes = varView.selectedIndexes()
+    #Selected indexes are indexes in proxy model, so translate to source indexes
+    selectedIndexes = [varView.model().mapToSource(proxyIndex) for proxyIndex in selectedProxyIndexes]
+    selectedRows = [index.row() for index in selectedIndexes]
+    selectedRows = set(selectedRows)
+    selectedVariants = []
+    for row in selectedRows:
+        selectedVariants.append(chromo.variants[row])
+    return selectedVariants
+
+
 #Adds a variant to selected chromosomes. Some models still have to be updated.
 #Not sure how to best handle input yet.
 def addVariant(chromo,chromosomes):
@@ -182,10 +195,10 @@ class VariantSortModel(QSortFilterProxyModel):
             rightData = int(self.sourceModel().data(right,0))
             return leftData < rightData
         elif left.column() == 3:
-            #if the column is 2, i.e. END, see if role 3 data for both items is > 0 (both have chrB)
+            #if the column is 2, i.e. END, see if role 32 data for both items is > 0 (both have chrB)
             #if only one of the items has chrB, put item with chrB as less than
-            leftData = self.sourceModel().data(left,1)
-            rightData = self.sourceModel().data(right,1)
+            leftData = self.sourceModel().data(left,32)
+            rightData = self.sourceModel().data(right,32)
             if leftData != '0' and rightData != '0':
                 #If both are digits (i.e. not X,Y,GL.. etc), compare as ints
                 #If only one is digit put digit chr as the lesser data
@@ -203,8 +216,8 @@ class VariantSortModel(QSortFilterProxyModel):
                 return False
             else:
                 #If no item has chrB, sort by end as an int
-                leftData = int(self.sourceModel().data(left,2))
-                rightData = int(self.sourceModel().data(right,2))
+                leftData = int(self.sourceModel().data(left,33))
+                rightData = int(self.sourceModel().data(right,33))
                 return leftData < rightData
         elif left.column() == 4 or left.column() == 5:
             #sort alphabetically by GENE(S) or CYTOBAND

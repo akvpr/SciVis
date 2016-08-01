@@ -20,12 +20,7 @@ class SciVisView(QMainWindow):
 
     def initmainwin(self):
         self.setWindowTitle('SciVis')
-        self.resize(QDesktopWidget().availableGeometry(self).size())
-        #Center the main window on the user's screen
-        frameGeo = self.frameGeometry()
-        desktopCenter = QDesktopWidget().availableGeometry().center()
-        frameGeo.moveCenter(desktopCenter)
-        self.move(frameGeo.topLeft())
+        self.setWindowState(Qt.WindowMaximized)
         #Adds a status bar to the main window
         self.statusBar()
         #Load various icons as QIcons
@@ -56,6 +51,8 @@ class SciVisView(QMainWindow):
         saveDatasetAct.triggered.connect(self.saveDataset)
         viewSettingsAct = QAction('Settings',self)
         viewSettingsAct.triggered.connect(self.viewSettings)
+        addExcludeFileAct = QAction('Add exclude file',self)
+        addExcludeFileAct.triggered.connect(self.addExcludeFile)
         #Create menus, and add actions
         self.createColorModel()
         self.menubar = self.menuBar()
@@ -449,7 +446,7 @@ class SciVisView(QMainWindow):
             plotTypeBox.addItem("Plot type: line")
             plotTypeBox.setCurrentIndex(view.plotType)
             plotTypeBox.currentIndexChanged.connect(view.changePlotType)
-            addBedAct = QAction('Bed',self)
+            addBedAct = QAction('Add bed track',self)
             addBedAct.triggered.connect(view.addBed)
             self.tools.addAction(showChInfoAct)
             self.tools.addAction(addBedAct)
@@ -647,4 +644,19 @@ class SciVisView(QMainWindow):
             oldWidget.deleteLater()
             self.dockWidget.updateGeometry()
             if view.type == 'coverage':
-                view.setActiveChromosome(selectedRow)
+                #Connect selection of variant to mark the variant in the view
+                varTable = varWidget.layout().itemAtPosition(1,0).widget()
+                selModel = varTable.selectionModel()
+                selModel.selectionChanged.connect(view.updatePlot)
+                view.setActiveChromosome(selectedRow,varTable)
+
+    #Reads a bed file and excludes regions in each chromosome
+    def addExcludeFile(self):
+        selectedData = self.selectDataset()
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
+        "tab files (*.tab)")[0]
+        if bedFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            for line in excludeLines:
+                pass

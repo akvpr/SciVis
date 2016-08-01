@@ -373,16 +373,18 @@ class CoverageView(QWidget):
             self.mainScene.addItem(yTickLabelItem)
 
         #Create x ticks to show chromosome position
-        bpIncrement = float(chromo.end)/10
-        for i in range(1,10):
+        bpIncrement = limits[1] / 10
+        bpStart = limits[0]
+        for i in range(0,10):
             point = QPointF(self.graphArea.left() + (i)*xAxisIncrement, self.graphArea.bottom())
             line = QLineF()
             line.setP1(point)
             line.setP2(point + QPointF(0,15))
             lineItem = QGraphicsLineItem(line)
             self.mainScene.addItem(lineItem)
-            bpPosition = i*bpIncrement
-            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition)))
+            bpPosition = bpStart + i*bpIncrement
+            #Show the position in kbp
+            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition/1000)))
             xTickLabelItem.setPos(point +  QPointF(0, 0))
             self.mainScene.addItem(xTickLabelItem)
 
@@ -448,6 +450,7 @@ class CoverageView(QWidget):
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
+        self.markVariants()
         self.update()
 
     def defineRectangles(self):
@@ -478,13 +481,14 @@ class CoverageView(QWidget):
         limits = [regionStart, regionLength]
         self.limits = limits
 
-    def setActiveChromosome(self,chromoNumber):
+    def setActiveChromosome(self,chromoNumber,varTable):
         #Before switching, save current marker for this chr
         self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
         self.activeChromo = chromoNumber
         self.limits = [0,int(self.chromosomes[self.activeChromo].end)]
         mRect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.varTable = varTable
         self.updateLimits()
         self.updatePlot()
 
@@ -505,11 +509,19 @@ class CoverageView(QWidget):
                     itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
                     itemWidth = (int(line[2])-int(line[1])) / (viewedBp) * maxLength
                     rect = QRectF(itemStart,itemY,itemWidth,itemHeight)
-                    #Only display items that are larger than 1 px(?) wide
-                    if rect.width() > 1:
-                        rectItem = QGraphicsRectItem(rect)
+                    #Only display items that are larger than 2 px(?) wide
+                    if rect.width() > 2:
+                        rectItem = BedRectItem(rect,line)
                         rectItem.setBrush(Qt.green)
                         self.bedScene.addItem(rectItem)
+                        toolText = line[3]
+                        textItem = QGraphicsTextItem(toolText)
+                        font = QFont()
+                        font.setPointSize(8)
+                        textItem.setFont(font)
+                        if textItem.boundingRect().width() < rectItem.boundingRect().width():
+                            self.bedScene.addItem(textItem)
+                            textItem.setPos(QPointF(itemStart,itemY))
             itemY += itemHeight+10
 
     #Reads a bed file and adds a list of bed elements for each chromosome
@@ -538,6 +550,24 @@ class CoverageView(QWidget):
                 if key in self.bedDict.keys():
                     self.bedDict[key].append(newBedList[key])
             self.updatePlot()
+
+    def markVariants(self):
+        chromo = self.chromosomes[self.activeChromo]
+        variants = common.returnVariants(chromo,self.varTable)
+        for variant in variants:
+            bpStart = variant[1]
+            bpEnd = variant[3]
+            if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                pen = QPen()
+                pen.setStyle(Qt.DashLine)
+                regionGraphic = QGraphicsRectItem(regionRect)
+                regionGraphic.setBrush(Qt.red)
+                regionGraphic.setPen(pen)
+                regionGraphic.setOpacity(0.6)
+                self.mainScene.addItem(regionGraphic)
 
 #Handles events for main graph area
 class CoverageGraphicsView(QGraphicsView):
@@ -574,6 +604,13 @@ class BedGraphicsView(QGraphicsView):
 
     def mousePressEvent(self,event):
         pass
+
+class BedRectItem(QGraphicsRectItem):
+
+    def __init__(self,rect,bedFields):
+        super().__init__(rect)
+        toolText = bedFields[3]
+        self.setToolTip(toolText)
 
 class AreaSelectorItem(QGraphicsItemGroup):
 

@@ -266,7 +266,7 @@ class Chromosome():
         else:
             rankScore = None
         #Add the variant data to this chromosome
-        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband, display_variant, rankScore]
+        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband,display_variant,rankScore]
         self.variants.append(variant)
 
     def createConnections(self):
