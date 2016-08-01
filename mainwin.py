@@ -20,12 +20,7 @@ class SciVisView(QMainWindow):
 
     def initmainwin(self):
         self.setWindowTitle('SciVis')
-        self.resize(QDesktopWidget().availableGeometry(self).size())
-        #Center the main window on the user's screen
-        frameGeo = self.frameGeometry()
-        desktopCenter = QDesktopWidget().availableGeometry().center()
-        frameGeo.moveCenter(desktopCenter)
-        self.move(frameGeo.topLeft())
+        self.setWindowState(Qt.WindowMaximized)
         #Adds a status bar to the main window
         self.statusBar()
         #Load various icons as QIcons
@@ -470,20 +465,44 @@ class SciVisView(QMainWindow):
             self.tools.show()
         if viewType == "heatmap":
             self.tools = self.addToolBar('Coverage tools')
-            self.showChInfoAct = QAction('Chromosomes',self)
-            self.showChInfoAct.triggered.connect(view.showChInfo)
-            self.addHeatmapAct = QAction('Add heatmap', self)
-            self.addHeatmapAct.triggered.connect(view.addHeatmap)
-            self.backAct = QAction('Back', self)
-            self.backAct.setShortcut(QKeySequence(Qt.Key_Left))
-            self.backAct.triggered.connect(view.back)
-            self.forwardAct = QAction('Forward', self)
-            self.forwardAct.setShortcut(QKeySequence(Qt.Key_Right))
-            self.forwardAct.triggered.connect(view.forward)
-            self.tools.addAction(self.showChInfoAct)
-            self.tools.addAction(self.addHeatmapAct)
-            self.tools.addAction(self.backAct)
-            self.tools.addAction(self.forwardAct)
+            dataDict = view.returnActiveDataset()
+            chromosomes = dataDict['chromosomeList']
+            chromoABox = QComboBox()
+            chromoStrings = [chromo.name for chromo in chromosomes if not "GL" in chromo.name]
+            chromoABox.addItems(chromoStrings)
+            chromoABox.currentIndexChanged.connect(view.changeChromoA)
+            chromoBBox = QComboBox()
+            chromoBBox.addItems(chromoStrings)
+            chromoBBox.currentIndexChanged.connect(view.changeChromoB)
+            binSizeBox = QLineEdit()
+            binSizeBox.setValidator(QIntValidator(2000,20000, self))
+            binSizeBox.insert("5000")
+            binSizeBox.editingFinished.connect(lambda: view.changeBinsize(binSizeBox.text()))
+            variantTypeBox = QComboBox()
+            mappingStrings = ["Deletion", "Translocation", "Duplication", "Interspersed duplication", "Tandem duplication", "Inversion", "Insertion", "Break end"]
+            variantTypeBox.addItems(mappingStrings)
+            variantTypeBox.currentIndexChanged.connect(lambda: view.changeMappingType(variantTypeBox.currentText()))
+            colorAct = QAction("Color", self)
+            colorAct.triggered.connect(self.heatColor)
+            backAct = QAction('Back', self)
+            backAct.setShortcut(QKeySequence(Qt.Key_Left))
+            backAct.triggered.connect(view.back)
+            forwardAct = QAction('Forward', self)
+            forwardAct.setShortcut(QKeySequence(Qt.Key_Right))
+            forwardAct.triggered.connect(view.forward)
+            binSizeBox.setMaximumWidth(100)
+            self.tools.addWidget(QLabel("Map chromosome:"))
+            self.tools.addWidget(chromoABox)
+            self.tools.addWidget(QLabel("to chromosome: "))
+            self.tools.addWidget(chromoBBox)
+            self.tools.addWidget(QLabel("with respect to: "))
+            self.tools.addWidget(variantTypeBox)
+            self.tools.addWidget(QLabel("Bin size: "))
+            self.tools.addWidget(binSizeBox)
+            self.tools.addWidget(QLabel("kb"))
+            self.tools.addAction(colorAct)
+            self.tools.addAction(backAct)
+            self.tools.addAction(forwardAct)
             self.tools.show()
 
     #Creates and initializes a new circular diagram
@@ -577,6 +596,11 @@ class SciVisView(QMainWindow):
         chosenColor = QColorDialog.getColor(colorItem.background().color())
         self.stainColors[stainItem.text()] = chosenColor
         colorItem.setBackground(chosenColor)
+        
+    def heatColor(self):
+        color = QColorDialog.getColor(self.stainColors["heatmapColor"])
+        self.stainColors["heatmapColor"] = color
+        self.updateSettings()
 
     def viewSettings(self):
         settingsLayout = QGridLayout()
