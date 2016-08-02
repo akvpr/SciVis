@@ -448,9 +448,12 @@ class SciVisView(QMainWindow):
             addBedAct.triggered.connect(view.addBed)
             addExcludeFileAct = QAction('Add exclude file',self)
             addExcludeFileAct.triggered.connect(view.addExcludeFile)
+            addExcludeGCFileAct = QAction('Add GC file',self)
+            addExcludeGCFileAct.triggered.connect(view.addExcludeGCFile)
             self.tools.addAction(showChInfoAct)
             self.tools.addAction(addBedAct)
             self.tools.addAction(addExcludeFileAct)
+            self.tools.addAction(addExcludeGCFileAct)
             self.tools.addWidget(plotTypeBox)
             self.tools.show()
         if viewType == "karyogram":

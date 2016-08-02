@@ -105,7 +105,7 @@ def toggleVariants(chromo, varView):
     selectedRows = [index.row() for index in selectedIndexes]
     selectedRows = set(selectedRows)
     for row in selectedRows:
-        dispVarItem = varView.model().sourceModel().item(row,6)
+        dispVarItem = varView.model().sourceModel().item(row,0)
         if chromo.variants[row][9]:
             dispVarItem.setCheckState(Qt.Unchecked)
             chromo.variants[row][9] = False
@@ -125,7 +125,6 @@ def returnVariants(chromo, varView):
     for row in selectedRows:
         selectedVariants.append(chromo.variants[row])
     return selectedVariants
-
 
 #Adds a variant to selected chromosomes. Some models still have to be updated.
 #Not sure how to best handle input yet.

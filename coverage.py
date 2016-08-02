@@ -449,6 +449,8 @@ class CoverageView(QWidget):
         #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
         self.overviewScene.addItem(self.selectorItem)
+        bedSceneRect = self.bedScene.sceneRect()
+        self.trackViewArea.setHeight(bedSceneRect.height()+20)
         self.bedView.setSceneRect(self.trackViewArea)
         self.overviewView.setSceneRect(self.overviewArea)
         self.mainView.setSceneRect(self.fitArea)
@@ -456,7 +458,12 @@ class CoverageView(QWidget):
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
         self.excludeRegions()
-        self.markVariants()
+        #Exception when changing between views and variant table is old; needs to be fixed
+        #Should save the view's active chromosome and select this again on view change (in mainwin)
+        try:
+            self.markVariants()
+        except:
+            pass
         self.update()
 
     def defineRectangles(self):
@@ -510,6 +517,15 @@ class CoverageView(QWidget):
         maxLength = self.trackArea.width()
         viewedBp = self.limits[1]
         for bedLines in self.bedDict[chromo.name]:
+            #Uses the first letter of the bed file as track name. Better names might exist.
+            trackName = bedLines[0][0]
+            trackName = trackName[0]
+            trackNameItem = QGraphicsTextItem(trackName)
+            font = QFont()
+            font.setPointSize(12)
+            trackNameItem.setFont(font)
+            self.bedScene.addItem(trackNameItem)
+            trackNameItem.setPos(QPointF(self.trackArea.left()-20,itemY))
             for line in bedLines:
                 if int(line[1]) >= self.limits[0] and int(line[2]) <= self.limits[1]+self.limits[0]:
                     itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
@@ -536,11 +552,11 @@ class CoverageView(QWidget):
         #Each line should have final format [bed,start,end,text1...]
         newBedList = {}
         bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
-        "bed files (*.bed)")[0]
+        "bed files (*.bed *.txt *.tab)")[0]
         if bedFile:
             reader = data.Reader()
             bedLines = reader.readGeneralTab(bedFile)
-            bedFileName = bedFile.split('/')[-1].replace('.bed','')
+            bedFileName = bedFile.split('/')[-1].replace('.bed','').replace('.txt','').replace('.tab','')
             for line in bedLines:
                 chrName = line[0]
                 #If this is a new chrName, construct empty list
@@ -575,8 +591,8 @@ class CoverageView(QWidget):
                 regionGraphic.setOpacity(0.6)
                 self.mainScene.addItem(regionGraphic)
 
-    #Reads a tab file (currently with GC content) and adds a list of excluded regions in each chromosome
-    def addExcludeFile(self):
+    #Reads a tab file (with GC content) and adds a list of excluded regions in each chromosome
+    def addExcludeGCFile(self):
         excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
         "tab files (*.tab)")[0]
         if excludeFile:
@@ -591,6 +607,22 @@ class CoverageView(QWidget):
                     region = [int(line[1]), int(line[2])]
                     if line[0] in self.excludeDict:
                         self.excludeDict[line[0]].append(region)
+        self.updatePlot()
+
+    #Reads a tab file (with any defined region) and adds a list of excluded regions in each chromosome
+    def addExcludeFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify exclude file",QDir.currentPath(),
+        "exclude files (*.tab *.txt)")[0]
+        if excludeFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, start, end
+                region = [int(line[1]), int(line[2])]
+                if line[0] in self.excludeDict:
+                    self.excludeDict[line[0]].append(region)
+        self.updatePlot()
 
     #Iterates through excluded regions in active chromsome and removes plot points
     #Might be done in a more efficient way considering performance issues
@@ -629,7 +661,7 @@ class CoverageGraphicsView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-#Graphics view for bed tracks, with disabled events
+#Graphics view for bed tracks, with most events disabled
 class BedGraphicsView(QGraphicsView):
 
     def __init__(self,scene):
@@ -639,17 +671,66 @@ class BedGraphicsView(QGraphicsView):
         pass
 
     def wheelEvent(self,event):
-        pass
+        #Only allow vertical scroll
+        if event.orientation() == Qt.Vertical:
+            QGraphicsView.wheelEvent(self, event)
+        else:
+            pass
 
     def mousePressEvent(self,event):
-        pass
+        item = self.itemAt(event.pos())
+        if item:
+            item.toggleMarked()
+            menu = QMenu()
+            linkAct = QAction("OMIM search: " + item.bedText, self)
+            linkAct.triggered.connect(lambda: self.openLink(item.bedText))
+            menu.addAction(linkAct)
+            menu.exec_(QCursor.pos())
+            item.toggleMarked()
 
+    def contextMenuEvent(self,event):
+        menu = QMenu()
+        #Should connect to a function to change default color for a track
+        trackColorAct = QAction('Select track colors',self)
+        menu.addAction(trackColorAct)
+        menu.exec_(QCursor.pos())
+
+    #Primitive function to search for bed item name in OMIM database
+    #Currently opens a browser and simply searches for the term, but could use omim REST-api?
+    def openLink(self,linkText):
+        linkUrl = QUrl("https://www.ncbi.nlm.nih.gov/omim/?term=" + linkText)
+        QDesktopServices.openUrl(linkUrl)
+
+#Bed graphic item with some convenience functions for marking etc
 class BedRectItem(QGraphicsRectItem):
 
     def __init__(self,rect,bedFields):
         super().__init__(rect)
-        toolText = bedFields[3]
-        self.setToolTip(toolText)
+        self.bedText = bedFields[3]
+        self.setToolTip(self.bedText)
+        self.marked = False
+
+    def toggleMarked(self):
+        if not self.marked:
+            pen = self.pen()
+            pen.setStyle(Qt.DashLine)
+            pen.setBrush(Qt.red)
+        else:
+            pen = QPen()
+        self.setPen(pen)
+        self.marked = not self.marked
+
+    def setMarked(self):
+        pen = self.pen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+        self.marked = True
+
+    def setUnmarked(self):
+        pen = QPen()
+        self.setPen(pen)
+        self.marked = False
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
