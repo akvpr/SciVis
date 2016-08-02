@@ -51,8 +51,6 @@ class SciVisView(QMainWindow):
         saveDatasetAct.triggered.connect(self.saveDataset)
         viewSettingsAct = QAction('Settings',self)
         viewSettingsAct.triggered.connect(self.viewSettings)
-        addExcludeFileAct = QAction('Add exclude file',self)
-        addExcludeFileAct.triggered.connect(self.addExcludeFile)
         #Create menus, and add actions
         self.createColorModel()
         self.menubar = self.menuBar()
@@ -448,8 +446,11 @@ class SciVisView(QMainWindow):
             plotTypeBox.currentIndexChanged.connect(view.changePlotType)
             addBedAct = QAction('Add bed track',self)
             addBedAct.triggered.connect(view.addBed)
+            addExcludeFileAct = QAction('Add exclude file',self)
+            addExcludeFileAct.triggered.connect(view.addExcludeFile)
             self.tools.addAction(showChInfoAct)
             self.tools.addAction(addBedAct)
+            self.tools.addAction(addExcludeFileAct)
             self.tools.addWidget(plotTypeBox)
             self.tools.show()
         if viewType == "karyogram":
@@ -598,7 +599,7 @@ class SciVisView(QMainWindow):
         chosenColor = QColorDialog.getColor(colorItem.background().color())
         self.stainColors[stainItem.text()] = chosenColor
         colorItem.setBackground(chosenColor)
-        
+
     def heatColor(self):
         color = QColorDialog.getColor(self.stainColors["heatmapColor"])
         self.stainColors["heatmapColor"] = color
@@ -678,14 +679,3 @@ class SciVisView(QMainWindow):
                 selModel = varTable.selectionModel()
                 selModel.selectionChanged.connect(view.updatePlot)
                 view.setActiveChromosome(selectedRow,varTable)
-
-    #Reads a bed file and excludes regions in each chromosome
-    def addExcludeFile(self):
-        selectedData = self.selectDataset()
-        excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
-        "tab files (*.tab)")[0]
-        if bedFile:
-            reader = data.Reader()
-            excludeLines = reader.readGeneralTab(excludeFile)
-            for line in excludeLines:
-                pass
