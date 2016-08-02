@@ -40,8 +40,10 @@ class CoverageView(QWidget):
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
-        #Initialize a dict with an empty list for each chromosome
+        #Initialize a dict with an empty list for each chromosome, to contain bed tracks
         self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
+        #Initialize an excluded region dict
+        self.excludeDict = {chromo.name: [] for chromo in self.chromosomes}
         self.mainView.setRenderHints(QPainter.Antialiasing)
         self.overviewView.setRenderHints(QPainter.Antialiasing)
         self.splitter.addWidget(self.mainView)
@@ -401,6 +403,8 @@ class CoverageView(QWidget):
                     pointItem.setBrush(QBrush(Qt.green))
                 else:
                     pointItem.setBrush(QBrush(Qt.black))
+                #Set data with key 0 as 'plotItem' for convenience
+                pointItem.setData(0,'plotItem')
                 self.mainScene.addItem(pointItem)
 
         elif ptype == 1:
@@ -427,6 +431,7 @@ class CoverageView(QWidget):
                 line = QLineF(startPoint, endPoint)
                 lineItem = QGraphicsLineItem(line)
                 lineItem.setPen(colorPen)
+                lineItem.setData(0,'plotItem')
                 self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
@@ -450,6 +455,7 @@ class CoverageView(QWidget):
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
+        self.excludeRegions()
         self.markVariants()
         self.update()
 
@@ -568,6 +574,39 @@ class CoverageView(QWidget):
                 regionGraphic.setPen(pen)
                 regionGraphic.setOpacity(0.6)
                 self.mainScene.addItem(regionGraphic)
+
+    #Reads a tab file (currently with GC content) and adds a list of excluded regions in each chromosome
+    def addExcludeFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
+        "tab files (*.tab)")[0]
+        if excludeFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Read each line and look for positions markd with (-1)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, pos1, pos2, value
+                line[3] = line[3].strip('\n')
+                if line[3] == '-1.0':
+                    region = [int(line[1]), int(line[2])]
+                    if line[0] in self.excludeDict:
+                        self.excludeDict[line[0]].append(region)
+
+    #Iterates through excluded regions in active chromsome and removes plot points
+    #Might be done in a more efficient way considering performance issues
+    def excludeRegions(self):
+        chromo = self.chromosomes[self.activeChromo]
+        for region in self.excludeDict[chromo.name]:
+            bpStart = region[0]
+            bpEnd = region[1]
+            if bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                intersectingItems = self.mainScene.items(regionRect)
+                for item in intersectingItems:
+                     if item.data(0) == 'plotItem':
+                         self.mainScene.removeItem(item)
 
 #Handles events for main graph area
 class CoverageGraphicsView(QGraphicsView):
