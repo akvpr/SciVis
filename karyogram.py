@@ -283,6 +283,7 @@ class KaryogramView(QGraphicsView):
 
     def drawConnections(self):
         self.connectionGraphicItems = []
+        placeLeft = True
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         for chrA in self.chromosomes:
             if not (chrA.display_connections and chrA.display):
@@ -302,17 +303,36 @@ class KaryogramView(QGraphicsView):
                     continue
                 else:
                     chrB = self.chromosomes[int(connection[1])-1]
-                if not chrB.display or chrA.name == chrB.name or connection[4] is None:
+                if not chrB.display or connection[4] is None:
                     continue
-                #The cytobands which the connections will go between are gathered
-                cbandA = connection[4].split(',')[0]
-                cbandB = connection[4].split(',')[1]
+                    
+                
+                connEndPos = int(connection[3].split(',')[1])
+                connStartPos = int(connection[2].split(',')[1])
+                #The cytobands which the connections will go between
+                for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
+                    if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
+                        cbandB = cytoItem.data(0)
+                    if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
+                        cbandA = cytoItem.data(0)
+                #do not show small variants within one cytoband
+                if cbandA == cbandB:
+                    continue
+
                 #The x-positions are accessed, the chromosome A x-pos has the chromosome width added to it. This will make the connection start on its right side
                 #First check if these cytobands exist, in case of discrepancy in vcf and cytoband files
                 if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
                     continue
-                xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+                if chrA.name == chrB.name:    
+                    if placeLeft:
+                        xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
+                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+                    else:
+                        xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
+                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
+                else:
+                    xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
+                    xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()    
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
                 cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]
                 cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
@@ -327,7 +347,16 @@ class KaryogramView(QGraphicsView):
                 pointB = QPoint(xPosB, yPosB)
                 connectionPath = QPainterPath()
                 connectionPath.moveTo(pointA)
-                connectionPath.lineTo(pointB)
+                if chrA.name == chrB.name:
+                    if placeLeft:
+                        pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
+                    else:
+                        pointC = QPoint(xPosA+80, (yPosA+yPosB)/2)
+                    placeLeft = not placeLeft
+                    connectionPath.quadTo(pointC, pointB)
+                else:
+                    connectionPath.lineTo(pointB)
+                    
                 connectionItem = QGraphicsPathItem(connectionPath)
                 #Set the color of the line to chrB's stain color (makes it difficult to distinguish though..)
                 pen = QPen()
@@ -336,6 +365,8 @@ class KaryogramView(QGraphicsView):
                 connectionItem.setPen(pen)
                 self.scene.addItem(connectionItem)
                 self.connectionGraphicItems.append(connectionItem)
+                    
+                    
 
     #Create chromosome items consisting of cytobands, names of bands, and chromosome names
     def createChromosomeItems(self):
@@ -427,6 +458,8 @@ class KaryogramView(QGraphicsView):
                         bandRectItem.setBrush(self.stainColors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
+                        bandRectItem.setData(2, cytoStart)
+                        bandRectItem.setData(3, cytoEnd)
                         self.scene.addItem(bandRectItem)
                         bandItems.append(bandRectItem)
                         if chromo.display_cytoBandNames:

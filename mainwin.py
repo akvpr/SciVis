@@ -476,7 +476,7 @@ class SciVisView(QMainWindow):
             chromoBBox.currentIndexChanged.connect(view.changeChromoB)
             binSizeBox = QLineEdit()
             binSizeBox.setValidator(QIntValidator(2000,20000, self))
-            binSizeBox.insert("5000")
+            binSizeBox.insert("10000")
             binSizeBox.editingFinished.connect(lambda: view.changeBinsize(binSizeBox.text()))
             variantTypeBox = QComboBox()
             mappingStrings = ["Deletion", "Translocation", "Duplication", "Interspersed duplication", "Tandem duplication", "Inversion", "Insertion", "Break end"]

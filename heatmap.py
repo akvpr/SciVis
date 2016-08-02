@@ -24,7 +24,7 @@ class HeatmapView(QGraphicsView):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.hide()
         self.origin = QPoint(0,0)
-        self.binSize = 5000
+        self.binSize = 10000
         self.chromoA = self.chromosomes[0]
         self.chromoB = self.chromosomes[0]
         self.mapping = "DEL"
@@ -35,6 +35,7 @@ class HeatmapView(QGraphicsView):
         self.show()
         self.clearScene()
         self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        self.scale(0.7, 0.7)
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -349,8 +350,8 @@ class HeatmapView(QGraphicsView):
             self.scene.addItem(yTickLabelItem)
 
         titleLabel = QGraphicsTextItem("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
-        yAxisLabel = QGraphicsTextItem(endString + " on chromosome " + chromoB.name + " (x" + str(int(binSize/1000)) + "kb)")
-        xAxisLabel = QGraphicsTextItem(startString + " on chromosome " + chromoA.name + " (x" + str(int(binSize/1000)) + "kb)")
+        yAxisLabel = QGraphicsTextItem(endString + " on chromosome " + chromoA.name + " (x" + str(int(binSize/1000)) + "kb)")
+        xAxisLabel = QGraphicsTextItem(startString + " on chromosome " + chromoB.name + " (x" + str(int(binSize/1000)) + "kb)")
 
         titleLabel.setPos(xAxisItemTop.boundingRect().center() + QPointF(-400,-100-yAxisItem.boundingRect().height()/2))
         yAxisLabel.setPos(yAxisItem.boundingRect().center() + QPointF(-150, 300))
