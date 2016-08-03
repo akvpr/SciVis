@@ -1,5 +1,29 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
+import data
+
+#Reads a bed file and adds a list of bed elements for each chromosome
+def createBedDict():
+    #Construct a dict to contain all relevant lines for each chromosome
+    #Each line should have final format [bed,start,end,text1...]
+    newBedDict = {}
+    bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
+    "bed files (*.bed *.txt *.tab)")[0]
+    if bedFile:
+        reader = data.Reader()
+        bedLines = reader.readGeneralTab(bedFile)
+        bedFileName = bedFile.split('/')[-1].replace('.bed','').replace('.txt','').replace('.tab','')
+        for line in bedLines:
+            chrName = line[0]
+            #If this is a new chrName, construct empty list
+            if not chrName in newBedDict:
+                newBedDict[chrName] = []
+            #Add the bed name as first element to identify this list, remove chr field
+            lineElements = [bedFileName]
+            line.pop(0)
+            lineElements.extend(line)
+            newBedDict[chrName].append(lineElements)
+    return newBedDict
 
 #Creates and returns data model for variants in given chromosome
 def createVariantInfo(chromo):

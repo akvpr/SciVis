@@ -211,6 +211,7 @@ class Reader():
                 #The fields are as following: #chromosome, startPos, endPos, text
                 fields = line.split('\t')
                 fields[0] = fields[0].replace("chr","").replace("Chr","").replace("CHR","")
+                fields[-1] = fields[-1].strip('\n')
                 tabLines.append(fields)
         return tabLines
 

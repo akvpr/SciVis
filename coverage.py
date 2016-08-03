@@ -405,6 +405,8 @@ class CoverageView(QWidget):
                     pointItem.setBrush(QBrush(Qt.black))
                 #Set data with key 0 as 'plotItem' for convenience
                 pointItem.setData(0,'plotItem')
+                pointBp = round((pointRect.center().x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                pointItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
                 self.mainScene.addItem(pointItem)
 
         elif ptype == 1:
@@ -432,6 +434,8 @@ class CoverageView(QWidget):
                 lineItem = QGraphicsLineItem(line)
                 lineItem.setPen(colorPen)
                 lineItem.setData(0,'plotItem')
+                pointBp = round((startPoint.x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                lineItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
                 self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
@@ -550,30 +554,12 @@ class CoverageView(QWidget):
 
     #Reads a bed file and adds a list of bed elements for each chromosome
     def addBed(self):
-        #Construct a dict to contain all relevant lines for each chromosome
-        #Each line should have final format [bed,start,end,text1...]
-        newBedList = {}
-        bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
-        "bed files (*.bed *.txt *.tab)")[0]
-        if bedFile:
-            reader = data.Reader()
-            bedLines = reader.readGeneralTab(bedFile)
-            bedFileName = bedFile.split('/')[-1].replace('.bed','').replace('.txt','').replace('.tab','')
-            for line in bedLines:
-                chrName = line[0]
-                #If this is a new chrName, construct empty list
-                if not chrName in newBedList:
-                    newBedList[chrName] = []
-                #Add the bed name as first element to identify this list, remove chr field
-                lineElements = [bedFileName]
-                line.pop(0)
-                lineElements.extend(line)
-                newBedList[chrName].append(lineElements)
-            #For each constructed list, search for appropriate chromosome to insert into
-            for key in newBedList.keys():
-                if key in self.bedDict.keys():
-                    self.bedDict[key].append(newBedList[key])
-            self.updatePlot()
+        newBedDict = common.createBedDict()
+        #For each constructed list, search for appropriate chromosome to insert into
+        for key in newBedDict.keys():
+            if key in self.bedDict.keys():
+                self.bedDict[key].append(newBedDict[key])
+        self.updatePlot()
 
     def markVariants(self):
         chromo = self.chromosomes[self.activeChromo]
@@ -604,7 +590,6 @@ class CoverageView(QWidget):
             #Create a dict and for each chromosome, create a list with excluded positions
             for line in excludeLines:
                 #Formatted as chr, pos1, pos2, value
-                line[3] = line[3].strip('\n')
                 if line[3] == '-1.0':
                     region = [int(line[1]), int(line[2])]
                     if line[0] in self.excludeDict:
