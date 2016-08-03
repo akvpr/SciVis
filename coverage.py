@@ -541,7 +541,9 @@ class CoverageView(QWidget):
                         font = QFont()
                         font.setPointSize(8)
                         textItem.setFont(font)
+                        #Only display the name on the rect if there's space for it
                         if textItem.boundingRect().width() < rectItem.boundingRect().width():
+                            #The item should not block events to underlying rect..
                             self.bedScene.addItem(textItem)
                             textItem.setPos(QPointF(itemStart,itemY))
             itemY += itemHeight+10
@@ -679,7 +681,7 @@ class BedGraphicsView(QGraphicsView):
 
     def mousePressEvent(self,event):
         item = self.itemAt(event.pos())
-        if item:
+        if item and item.data(0) == 'bedRect':
             item.toggleMarked()
             menu = QMenu()
             linkAct = QAction("OMIM search: " + item.bedText, self)
@@ -709,6 +711,7 @@ class BedRectItem(QGraphicsRectItem):
         self.bedText = bedFields[3]
         self.setToolTip(self.bedText)
         self.marked = False
+        self.setData(0,"bedRect")
 
     def toggleMarked(self):
         if not self.marked:

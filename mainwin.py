@@ -68,7 +68,9 @@ class SciVisView(QMainWindow):
         self.sceneTabs = QTabWidget(self)
         self.sceneTabs.currentChanged.connect(self.viewChanged)
         self.setCentralWidget(self.sceneTabs)
+        #Keep a list of views and selected chromosomes for these
         self.views = []
+        self.viewChromosomes = []
         self.initDock()
         self.bedWidget = None
         self.show()
@@ -146,6 +148,8 @@ class SciVisView(QMainWindow):
         self.setCorner(Qt.TopRightCorner,Qt.RightDockWidgetArea)
         self.setCorner(Qt.BottomLeftCorner,Qt.LeftDockWidgetArea)
         self.setCorner(Qt.BottomRightCorner,Qt.RightDockWidgetArea)
+        #Sets the title widget to an empty widget, effectively removing float ability and title bar
+        self.dockWidget.setTitleBarWidget(QWidget())
 
     def dockTabChanged(self):
         pass
@@ -416,8 +420,10 @@ class SciVisView(QMainWindow):
         self.dockTabs.setCurrentIndex(0)
         #Add appropriate toolbar for scene type
         viewType = view.type
+        viewInd = self.views.index(view)
         if viewType == "circ":
             view.updateToggles()
+            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(self.viewChromosomes[viewInd])
             self.tools = self.addToolBar('Circ tools')
             showChInfoAct = QAction('Chromosomes',self)
             showChInfoAct.triggered.connect(view.showChInfo)
@@ -436,6 +442,8 @@ class SciVisView(QMainWindow):
             self.tools.addAction(importColorTabAct)
             self.tools.show()
         if viewType == "coverage":
+            view.startScene()
+            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(self.viewChromosomes[viewInd])
             self.tools = self.addToolBar('Coverage tools')
             showChInfoAct = QAction('Chromosomes',self)
             showChInfoAct.triggered.connect(view.showChInfo)
@@ -458,6 +466,7 @@ class SciVisView(QMainWindow):
             self.tools.show()
         if viewType == "karyogram":
             view.updateToggles()
+            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(self.viewChromosomes[viewInd])
             self.tools = self.addToolBar('Karyogram tools')
             updateKaryogramAct = QAction('Update karyogram', self)
             updateKaryogramAct.triggered.connect(view.updateItems)
@@ -470,6 +479,7 @@ class SciVisView(QMainWindow):
             self.tools.addAction(updateKaryogramAct)
             self.tools.show()
         if viewType == "heatmap":
+            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(self.viewChromosomes[viewInd])
             self.tools = self.addToolBar('Coverage tools')
             dataDict = view.returnActiveDataset()
             chromosomes = dataDict['chromosomeList']
@@ -522,6 +532,7 @@ class SciVisView(QMainWindow):
             self.activeScene = True
             view = circ.CircView(selectedData,self)
             self.views.append(view)
+            self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Circular")
             self.sceneTabs.setCurrentIndex(tabIndex)
             self.show()
@@ -538,11 +549,11 @@ class SciVisView(QMainWindow):
             self.update()
             view = coverage.CoverageView(selectedData,self)
             self.views.append(view)
+            self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
             self.sceneTabs.setCurrentIndex(tabIndex)
-            view.startScene()
-            self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(0)
             self.show()
+
 
     #Creates and initializes a new karyotype diagram
     def newKaryogram(self):
@@ -555,6 +566,7 @@ class SciVisView(QMainWindow):
             self.activeScene = True
             view = karyogram.KaryogramView(selectedData,self)
             self.views.append(view)
+            self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Karyogram")
             self.sceneTabs.setCurrentIndex(tabIndex)
             self.show()
@@ -570,6 +582,7 @@ class SciVisView(QMainWindow):
             self.activeScene = True
             view = heatmap.HeatmapView(selectedData,self)
             self.views.append(view)
+            self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Heatmap")
             self.sceneTabs.setCurrentIndex(tabIndex)
             self.show()
@@ -668,9 +681,11 @@ class SciVisView(QMainWindow):
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()
+        viewInd = self.views.index(view)
         selectedInds = selected.indexes()
         if selectedInds:
             selectedRow = selectedInds[0].row()
+            self.viewChromosomes[viewInd] = selectedRow
             varWidget = view.createVariantWidget(selectedRow)
             self.dockWidget.widget().layout().addWidget(varWidget)
             oldWidget = self.dockWidget.widget().layout().takeAt(1).widget()
