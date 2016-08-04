@@ -54,7 +54,6 @@ class CircView(QGraphicsView):
             color = color.darker(105)
         #A list containing rectangles for extra layers, starting empty
         self.addedLayers = []
-        self.initscene()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -693,12 +692,18 @@ class CircView(QGraphicsView):
                 distItem = QGraphicsPathItem(outerPath)
                 self.scene.addItem(distItem)
 
+            diaAdjust = (math.sqrt(2) * self.outermostRect.width() - self.outermostRect.width()) / 8
+            startPos = QPointF(self.outermostRect.bottomRight()) - QPointF(diaAdjust,diaAdjust)
             for incr in range(11):
+                adjustPoint1 = QPointF(incr*10,10)
+                adjustPoint2 = QPointF(incr*10,-10)
+                adjustPoint3 = QPointF(incr*10,5)
+                adjustPoint4 = QPointF(incr*10,-5)
                 if incr%10 == 0:
-                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
+                    lineBetween = QLineF(startPos + adjustPoint1, startPos + adjustPoint2)
                     legendNameItem = QGraphicsTextItem(str(incr))
                 else:
-                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height()-5, outRect.width()+incr*10, outRect.height()-15)
+                    lineBetween = QLineF(startPos + adjustPoint3, startPos + adjustPoint4)
                     legendNameItem = QGraphicsTextItem("")
                 legendPath = QPainterPath()
                 legendPath.moveTo(lineBetween.pointAt(0))
@@ -708,7 +713,7 @@ class CircView(QGraphicsView):
                 self.scene.addItem(legendItem)
                 self.scene.addItem(legendNameItem)
 
-            lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
+            lineBetween = QLineF(startPos, startPos + QPointF(100,0))
             legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
             legendPath = QPainterPath()
             legendPath.moveTo(lineBetween.pointAt(0))
@@ -808,8 +813,8 @@ class CircView(QGraphicsView):
         self.makeItems()
         self.createCoverage()
         self.drawConnections()
-        self.createDistanceMarkers()
         self.addLayers()
+        self.createDistanceMarkers()
         self.addFileText()
         for connList in self.connectionItems.values():
             for connItem in connList:
@@ -935,9 +940,8 @@ class CircView(QGraphicsView):
                     #Remove the inner circle sector from the outer sector to get the area to display
                     regionPath = outer.subtracted(inner)
                     regionPath = regionPath.subtracted(leftoverArea)
-                    regionItem = QGraphicsPathItem(regionPath)
+                    regionItem = BedRegionItem(regionPath,region)
                     regionItem.setBrush(self.chromoColors[chromo.name])
-                    regionItem.setToolTip(region[3])
                     self.scene.addItem(regionItem)
                 layerIndex += 1
 
@@ -974,6 +978,38 @@ class CircView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
+#Bed graphic item with some convenience functions for marking etc
+class BedRegionItem(QGraphicsPathItem):
+
+    def __init__(self,path,bedFields):
+        super().__init__(path)
+        self.bedText = bedFields[3]
+        self.setToolTip(self.bedText)
+        self.marked = False
+        self.setData(0,"bedItem")
+
+    def toggleMarked(self):
+        if not self.marked:
+            pen = self.pen()
+            pen.setStyle(Qt.DashLine)
+            pen.setBrush(Qt.red)
+        else:
+            pen = QPen()
+        self.setPen(pen)
+        self.marked = not self.marked
+
+    def setMarked(self):
+        pen = self.pen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+        self.marked = True
+
+    def setUnmarked(self):
+        pen = QPen()
+        self.setPen(pen)
+        self.marked = False
+
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
 
@@ -981,7 +1017,7 @@ class ChromoGraphicItem(QGraphicsPathItem):
         super().__init__(path)
         self.selected = False
         self.nameString = nameString
-        self.setData(0,"ChromoItem")
+        self.setData(0,"chromoItem")
         self.setPen(QPen(Qt.black,1))
 
     #Marks the chromosome item with a blue outline if selected
@@ -1019,13 +1055,21 @@ class CircScene(QGraphicsScene):
                 continue
             #Items with custom selection behavior have custom data
             #These should have their own handling; other items go through the default implementation
-            if (item.data(0) == "ChromoItem"):
+            if item.data(0) == "chromoItem":
                 if item.selected:
                     item.unmark()
                     self.markedChromItems.remove(item)
                 else:
                     item.mark()
                     self.markedChromItems.append(item)
+            if item.data(0) == 'bedItem':
+                item.toggleMarked()
+                menu = QMenu()
+                linkAct = QAction("OMIM search: " + item.bedText, self)
+                linkAct.triggered.connect(lambda: self.openLink(item.bedText))
+                menu.addAction(linkAct)
+                menu.exec_(QCursor.pos())
+                item.toggleMarked()
             else:
                 QGraphicsScene.mousePressEvent(self,event)
 
@@ -1114,3 +1158,9 @@ class CircScene(QGraphicsScene):
             labelItem = self.createItemGroup([rectItem,textItem])
             labelItem.setFlag(QGraphicsItem.ItemIsMovable)
             labelItem.setPos(self.lastContextPos)
+
+    #Primitive function to search for bed item name in OMIM database
+    #Currently opens a browser and simply searches for the term, but could use omim REST-api?
+    def openLink(self,linkText):
+        linkUrl = QUrl("https://www.ncbi.nlm.nih.gov/omim/?term=" + linkText)
+        QDesktopServices.openUrl(linkUrl)

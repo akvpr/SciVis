@@ -169,8 +169,26 @@ class SciVisView(QMainWindow):
                 defaultPath = QDir.currentPath() + "/" + tabName
                 defaultPath = defaultPath.replace("tab","png")
             savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
-            viewPixMap = QPixmap.grabWidget(view)
-            viewPixMap.save(savePath)
+            viewType = view.type
+            if viewType == 'circ' or viewType == 'karyogram' or viewType == 'heatmap':
+                image = QImage(self.size(),QImage.Format_ARGB32)
+                image.fill(Qt.white)
+                imgPainter = QPainter(image)
+                imgPainter.setRenderHint(QPainter.Antialiasing)
+                view.scene.render(imgPainter)
+                imgPainter.end()
+                image.save(savePath)
+            elif viewType == 'coverage':
+                image = QImage(self.size(),QImage.Format_ARGB32)
+                image.fill(Qt.white)
+                imgPainter = QPainter(image)
+                imgPainter.setRenderHint(QPainter.Antialiasing)
+                view.mainScene.render(imgPainter)
+                imgPainter.end()
+                image.save(savePath)
+            else:
+                viewPixMap = QPixmap.grabWidget(self)
+                viewPixMap.save(savePath)
 
     #Checks if an active scene is running and if it's ok to continue (closing scene?)
     def confirmChange(self):
