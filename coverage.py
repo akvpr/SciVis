@@ -1,112 +1,82 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-import numpy as np
 import math
-from matplotlib.figure import Figure
-from matplotlib.backend_bases import key_press_handler
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
-from matplotlib.backends.backend_qt4agg import (
-    FigureCanvasQTAgg as FigureCanvas,
-    NavigationToolbar2QT as NavigationToolbar)
-
-class CoverageScrollArea(QScrollArea):
-
-    def __init__(self,dataDict):
-        super().__init__()
-        self.type = "coverage"
-        self.subview = CoverageView(dataDict)
-        self.setWidget(self.subview)
-        self.setWidgetResizable(True)
-
-    def viewSettings(self):
-        self.subview.viewSettings()
-
-    def closeOpenWindows(self):
-        try:
-            self.subview.chDia.close()
-        except:
-            pass
-
-    def returnActiveDataset(self):
-        return self.subview.returnActiveDataset()
+import common
+import data
 
 class CoverageView(QWidget):
 
-    def __init__(self,dataDict):
-        super().__init__()
+    def __init__(self,dataDict, parent):
+        #Also DragMode scrollHand if in graphArea?
+        self.layout = QVBoxLayout()
+        self.splitter = QSplitter(parent)
+        self.splitter.setOrientation(Qt.Vertical)
+        self.overviewScene = QGraphicsScene()
+        self.overviewView = QGraphicsView(self.overviewScene)
+        self.bedScene = QGraphicsScene()
+        self.bedView = BedGraphicsView(self.bedScene)
+        self.bedView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.bedView.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.mainScene = QGraphicsScene()
+        self.mainView = CoverageGraphicsView(self.mainScene,self.bedView,self)
+        #Connect the bed view scroll to main view scroll instead
+        self.mainView.horizontalScrollBar().valueChanged.connect(self.bedView.horizontalScrollBar().setValue)
+        self.mainView.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.type = "coverage"
+        super().__init__(parent)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
-        self.subWindows = []
-        self.grid = QGridLayout()
-        self.setLayout(self.grid)
-        self.resize(QDesktopWidget().availableGeometry(self).size())
-        self.maxColumns = 2
+        self.stainNames = parent.stainNames
+        self.stainColors = parent.stainColors
         self.bpWindow = 100
         self.minCoverage = 0
         self.maxCoverage = 5
+        self.dupLimit = 2.25
+        self.delLimit = 1.75
+        self.plotType = 0
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
-        self.showChInfo()
+        #Initialize a dict with an empty list for each chromosome, to contain bed tracks
+        self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
+        #Initialize an excluded region dict
+        self.excludeDict = {chromo.name: [] for chromo in self.chromosomes}
+        self.mainView.setRenderHints(QPainter.Antialiasing)
+        self.overviewView.setRenderHints(QPainter.Antialiasing)
+        self.splitter.addWidget(self.mainView)
+        self.splitter.addWidget(self.bedView)
+        #Set initial size of bed area in splitter to 0 (not showing)
+        splitterSizes = self.splitter.sizes()
+        self.splitter.setSizes([splitterSizes[0],0])
+        self.layout.addWidget(self.overviewView)
+        self.layout.addWidget(self.splitter)
+        self.layout.setStretch(0,0)
+        self.layout.setStretch(1,1)
+        self.setLayout(self.layout)
+
+    def startScene(self):
+        self.defineRectangles()
+        self.activeChromo = 0
+        #Dict for position marker values for chromosomes
+        self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
+        self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
 
     def returnActiveDataset(self):
         return self.dataDict
 
-    #Adds a subwindow containing a matplotlib widget to the grid layout
-    def addChromoPlot(self):
-        addDialog = QDialog()
-        addDialog.setWindowTitle("Add plot")
-        applyButton = QPushButton('Ok', addDialog)
-        applyButton.clicked.connect(addDialog.accept)
-        chromoBox = QComboBox()
-        chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-        chromoBox.addItems(chromoStrings)
-        chrLabel = QLabel("Add plot for chromosome: ")
-        typeBox = QComboBox()
-        typeStrings = ["Line plot", "Scatter plot"]
-        typeBox.addItems(typeStrings)
-        typeLabel = QLabel("Plot method: ")
-        addDialog.layout = QGridLayout(addDialog)
-        addDialog.layout.addWidget(chrLabel,0,0)
-        addDialog.layout.addWidget(chromoBox,0,1)
-        addDialog.layout.addWidget(typeLabel,1,0)
-        addDialog.layout.addWidget(typeBox,1,1)
-        addDialog.layout.addWidget(applyButton,2,0)
-        choice = addDialog.exec_()
-        if choice == QDialog.Accepted:
-            chromo = self.chromosomes[chromoBox.currentIndex()]
-            chromoPlot = ChromoPlotWindow(chromo,typeBox.currentIndex(), self.cytoInfo,self)
-            self.subWindows.append(chromoPlot)
-            self.arrangePlots()
-
-    #Removes a plot and rearranges existing plots
-    def removeChromoPlot(self,plot):
-        self.subWindows.remove(plot)
-        self.grid.removeWidget(plot)
-        plot.destroy()
-        self.arrangePlots()
-
-    def arrangePlots(self):
-        currentColumn = 0
-        currentRow = 0
-        for plot in self.subWindows:
-            self.grid.addWidget(plot,currentRow,currentColumn)
-            if currentColumn == self.maxColumns-1:
-                currentRow += 1
-                currentColumn = 0
-            else:
-                currentColumn += 1
-        self.update()
+    def closeOpenWindows(self):
+        try:
+            self.chDia.close()
+        except:
+            pass
 
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
         #create header labels to distinguish different settings.
-        verticalHeaders = ["bpWindow", "minCoverage", "maxCoverage"]
+        verticalHeaders = ["bpWindow", 'dupLimit', 'delLimit', "minCoverage", "maxCoverage"]
         self.settingsModel.setVerticalHeaderLabels(verticalHeaders)
         bpWinText = QStandardItem("BP Resolution (kb)")
         bpWinText.setEditable(False)
@@ -114,60 +84,71 @@ class CoverageView(QWidget):
         bpWinData = QStandardItem()
         bpWinData.setData(self.bpWindow,0)
         bpWinData.setEditable(True)
+        dupLimitText = QStandardItem("Duplication limit")
+        dupLimitText.setEditable(False)
+        dupLimitText.setToolTip("Upper bound for marking a data point as a duplication")
+        dupLimitData = QStandardItem()
+        dupLimitData.setData(self.dupLimit,0)
+        dupLimitData.setEditable(True)
+        delLimitText = QStandardItem("Deletion limit")
+        delLimitText.setEditable(False)
+        delLimitText.setToolTip("Lower bound for marking a data point as a deletion")
+        delLimitData = QStandardItem()
+        delLimitData.setData(self.delLimit,0)
+        delLimitData.setEditable(True)
         minCovLimitText = QStandardItem("Min.coverage value (%)")
         minCovLimitText.setEditable(False)
-        minCovLimitText.setToolTip("Minimum coverage value,\nin percentage of average coverage value of genome.")
+        minCovLimitText.setToolTip("Lower bound for coverage values,\nin percentage of average coverage value of genome.")
         minCovLimitData = QStandardItem()
         minCovLimitData.setData(self.minCoverage*100,0)
         minCovLimitData.setEditable(True)
         maxCovLimitText = QStandardItem("Max. coverage value (%)")
         maxCovLimitText.setEditable(False)
-        maxCovLimitText.setToolTip("Maximum coverage value,\nin percentage of average coverage value of genome.")
+        maxCovLimitText.setToolTip("Upper bound for coverage values,\nin percentage of average coverage value of genome.")
         maxCovLimitData = QStandardItem()
         maxCovLimitData.setData(self.maxCoverage*100,0)
         maxCovLimitData.setEditable(True)
-        maxColumnsText = QStandardItem("Number of columns")
-        maxColumnsText.setEditable(False)
-        maxColumnsText.setToolTip("Number of columns to arrange diagrams in")
-        maxColumnsData = QStandardItem()
-        maxColumnsData.setData(self.maxColumns,0)
-        maxColumnsData.setEditable(True)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
-        self.settingsModel.setItem(1,0,minCovLimitText)
-        self.settingsModel.setItem(1,1,minCovLimitData)
-        self.settingsModel.setItem(2,0,maxCovLimitText)
-        self.settingsModel.setItem(2,1,maxCovLimitData)
-        self.settingsModel.setItem(3,0,maxColumnsText)
-        self.settingsModel.setItem(3,1,maxColumnsData)
-        self.settingsModel.itemChanged.connect(self.updateSettings)
+        self.settingsModel.setItem(1,0,dupLimitText)
+        self.settingsModel.setItem(1,1,dupLimitData)
+        self.settingsModel.setItem(2,0,delLimitText)
+        self.settingsModel.setItem(2,1,delLimitData)
+        self.settingsModel.setItem(3,0,minCovLimitText)
+        self.settingsModel.setItem(3,1,minCovLimitData)
+        self.settingsModel.setItem(4,0,maxCovLimitText)
+        self.settingsModel.setItem(4,1,maxCovLimitData)
 
-    def viewSettings(self):
-        self.settingsList = QTableView()
-        self.settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.settingsList.setShowGrid(False)
-        self.settingsList.horizontalHeader().hide()
-        self.settingsList.verticalHeader().hide()
-        self.settingsList.setModel(self.settingsModel)
-        self.settingsList.setTextElideMode(Qt.ElideNone)
-        self.settingsDia = QDialog(self)
-        self.settingsDia.setWindowTitle("Settings")
-        applyButton = QPushButton('Apply', self.settingsDia)
-        applyButton.clicked.connect(self.settingsDia.accept)
-        self.settingsDia.layout = QGridLayout(self.settingsDia)
-        self.settingsDia.layout.addWidget(self.settingsList,0,0,1,3)
-        self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
-        self.settingsDia.show()
+    def updateSettings(self):
+        #Go through every row in the settings model and update accordingly
+        for row in range(self.settingsModel.rowCount()):
+            item = self.settingsModel.item(row,1)
+            if row == 0:
+                self.bpWindow = item.data(0)
+            if row == 1:
+                self.dupLimit = item.data(0)
+            if row == 2:
+                self.delLimit = item.data(0)
+            if row == 3:
+                self.minCoverage = item.data(0)/100
+            if row == 4:
+                self.maxCoverage = item.data(0)/100
+        self.updatePlot()
 
-    def updateSettings(self,item):
-        if item.row() == 0:
-            self.bpWindow = item.data(0)
-        if item.row() == 1:
-            self.minCoverage = item.data(0)/100
-        if item.row() == 2:
-            self.maxCoverage = item.data(0)/100
-        if item.row() == 3:
-            self.maxColumns = item.data(0)
+    #Creates and returns a widget with this view's settings
+    def returnSettingsWidget(self):
+        settingsWidget = QWidget()
+        settingsLayout = QGridLayout()
+        settingsList = QTableView()
+        settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        settingsList.setShowGrid(False)
+        settingsList.horizontalHeader().hide()
+        settingsList.verticalHeader().hide()
+        settingsList.setModel(self.settingsModel)
+        settingsList.setTextElideMode(Qt.ElideNone)
+        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsWidget.setLayout(settingsLayout)
+        return settingsWidget
 
     #Creates data model for info window
     def createChInfo(self):
@@ -214,393 +195,632 @@ class CoverageView(QWidget):
         self.chDia.setMinimumSize(450,400)
         self.chDia.show()
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
+    def returnChromoInfoWidget(self):
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
+        viewVarButton.clicked.connect(self.viewVariants)
+        viewVarButton.setToolTip("View variants in chromosome")
+        #Button for adding variants
+        addVariantButton = QPushButton(QIcon("icons/new.png"),"")
+        addVariantButton.clicked.connect(self.addVariant)
+        addVariantButton.setToolTip("Add custom variant")
+        chromoInfoLayout = QGridLayout()
+        chromoInfoLayout.addWidget(self.chList,0,0,1,2)
+        chromoInfoLayout.addWidget(viewVarButton,1,0,1,1)
+        chromoInfoLayout.addWidget(addVariantButton,1,1,1,1)
+        chromoWidget = QWidget()
+        chromoWidget.setLayout(chromoInfoLayout)
+        return chromoWidget
 
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia = common.createVariantDia(chromo,self)
             viewVarDia.show()
 
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        return varWidget
+
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
 
-#Widget containing a pyplot, plotting coverage data from given chromosome
-class ChromoPlotWindow(QWidget):
-
-    def __init__(self,chromo,plotType, cytoInfo,parent):
-        super().__init__(parent)
-        self.chromo = chromo
-        self.plotType = plotType
-        self.cytoInfo = cytoInfo
-        self.setMinimumSize(500,500)
-        self.figure = Figure(figsize=(5,2),dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setParent(self)
-        self.canvas.setFocusPolicy( Qt.ClickFocus )
-        self.canvas.setFocus()
-        #Set true/false on toolbar to toggle coordinate display
-        self.mpl_toolbar = NavigationToolbar(self.canvas, self, False)
-        minLabel = QLabel("X min: ")
-        maxLabel = QLabel("X max: ")
-        self.minXSet = QLineEdit(self)
-        self.maxXSet = QLineEdit(self)
-        self.mpl_toolbar.addWidget(minLabel)
-        self.mpl_toolbar.addWidget(self.minXSet)
-        self.mpl_toolbar.addWidget(maxLabel)
-        self.mpl_toolbar.addWidget(self.maxXSet)
-        self.canvas.mpl_connect('key_press_event', self.on_key_press)
-        self.canvas.mpl_connect('draw_event', self.updateSetLimits)
-        self.canvas.mpl_connect('button_release_event', self.onClick)
-        #self.canvas.mpl_connect('pick_event', self.onpick)
-        #self.figure.canvas.mpl_connect('motion_notify_event', self._onMotion)
-
-        vbox = QVBoxLayout()
-        vbox.addWidget(self.canvas)
-        vbox.addWidget(self.mpl_toolbar)
-        self.setLayout(vbox)
-        self.ax = self.figure.add_subplot(111)
-
-        normValue = self.parentWidget().coverageNorm
-        minCov = normValue*self.parentWidget().minCoverage
-        maxCov = normValue*self.parentWidget().maxCoverage
-        dupLimit = 2.25
-        delLimit = 1.75
-        self.coverageData = []
-        
-        #Identifies centromere regions according to the cytoTab file
-        centromerePos = []
+    def createOverview(self,chromo):
+        bandHeight = self.overviewArea.height() / 2
+        chromoWidth = self.overviewArea.width()
+        bandYPos = self.overviewArea.top() + bandHeight/2
+        firstAcen = True
+        #Find each cytoband for this chromosome, and create band items using this data
         for cyto in self.cytoInfo:
-            if cyto[0] == self.chromo.name and cyto[4] == 'acen':
-                centromerePos.append([int(cyto[1]), int(cyto[2])])
-                
-                
-    
-        #Maps colors to coverage values as follows: red: [0,1.75], black: [1.75,2.25], green: [1.25,10]
-        colorMap = ListedColormap(['r', 'black', 'g'])
-        colorNorm = BoundaryNorm([0, delLimit, dupLimit, 10], 3)
+            if cyto[0] == chromo.name:
+                totalCytoBP = int(cyto[2]) - int(cyto[1])
+                bandXPos = self.overviewArea.left() + (int(cyto[1]) / int(chromo.end)) * chromoWidth
+                bandWidth = (totalCytoBP / int(chromo.end)) * chromoWidth
+                #If first item, round on left
+                if int(cyto[1]) is 0:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setRight(rect.right() + rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,-180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                #If first acen, round on right
+                elif cyto[4] == 'acen' and firstAcen:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                    firstAcen = False
+                #If second acen, round on left
+                elif cyto[4] == 'acen':
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setRight(rect.right() + rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,-180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                #If last item, round on right (i.e. last index in last chr or new chr next on next index)
+                elif self.cytoInfo.index(cyto) == len(self.cytoInfo)-1:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                elif self.cytoInfo[self.cytoInfo.index(cyto)+1][0] != chromo.name:
+                    rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
+                    rect.setLeft(rect.left() - rect.width())
+                    roundPath = QPainterPath(rect.center())
+                    roundPath.arcTo(rect,-90,180)
+                    roundPath.closeSubpath()
+                    bandRectItem = QGraphicsPathItem(roundPath)
+                else:
+                    #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
+                    bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
+                bandRectItem.setBrush(self.stainColors[cyto[4]])
+                bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
+                self.overviewScene.addItem(bandRectItem)
+                #Add the chromosome name to the left of the area
+                nameItem = QGraphicsTextItem(chromo.name)
+                nameItem.setPos( QPointF(self.overviewArea.left()-20, self.overviewArea.top()+5) )
+                font = QFont()
+                font.setBold(True)
+                nameItem.setFont(font)
+                self.overviewScene.addItem(nameItem)
 
-        if self.plotType == 0:
-        
-            coverageChunks = [chromo.coverage[i:i+(self.parentWidget().bpWindow*10)] for i in range(0,len(chromo.coverage),(self.parentWidget().bpWindow*10))]
-            for chunk in coverageChunks:
-                val = sum(chunk) / len(chunk)
-                if val > maxCov:
-                    val = maxCov
-                if val < minCov:
-                    val = minCov
-                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
-                self.coverageData.append(2*val/normValue)
-        
-            #Adding more data points in order to get make shorter segments for a more accurate coloring
-            #the goal is to get 10 times more data points, this is not precisely achieved. With resolution 100kb we get 9,964x, 10kb -> 9,9964x, 1kb -> 9,9996x
-            extendedData = self.getMean(self.coverageData)
-            
-            #gives centromere regions the value 2
-            for pos in centromerePos:
-                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
-                    extendedData[index] = 2
-            
-            #See the following example code for explanation http://matplotlib.org/examples/pylab_examples/multicolored_line.html
-            #First creating points (x,y), where x is position in basepair and y is the coverage value for that position
-            #Then joining two points into a segment where the segment is defined by (x1,y1), (x2,y2)
-            #Each segment is assigned the starting coverage value i.e. y1
-            #The segments are then joined together to a "line collection" and are colored according to the colorMap and colorNorm.
-            #A y1 value below 1.75 -> red color, a y1 value between 1.75 and 2.25 -> black and y1 > 2.25 -> green
-            points = np.array([range(len(extendedData)), extendedData]).T.reshape(-1, 1, 2)
-            segments = np.concatenate([points[:-1], points[1:]], axis=1)
-            
-            #converting the coverageData list into a numpy array needed for the LineCollection
-            numpyArrayCData = np.array(extendedData)
-            lc = LineCollection(segments, cmap=colorMap, norm=colorNorm, pickradius=10)
-            lc.set_array(numpyArrayCData)
-            lc.set_picker(True)
-            self.ax.add_collection(lc)
-            intervalSize = 10
-            self.shadow(extendedData,dupLimit,delLimit,intervalSize)  
-            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
-            self.dataList = extendedData    
+    def createPlot(self,chromo,ptype,limits):
+        coverageData = []
+        normValue = self.coverageNorm
+        minCov = normValue*self.minCoverage
+        maxCov = normValue*self.maxCoverage
+        #Create an average values for coverage, depending into user defined window
+        coverageChunks = [chromo.coverage[i:i+(self.bpWindow)] for i in range(0,len(chromo.coverage),(self.bpWindow))]
+        for chunk in coverageChunks:
+            val = sum(chunk) / len(chunk)
+            if val > maxCov:
+                val = maxCov
+            if val < minCov:
+                val = minCov
+            #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
+            coverageData.append(2*val/normValue)
+        startIndex = round(limits[0] / int(chromo.end) * len(coverageData))
+        endIndex = round((limits[0] + limits[1]) / int(chromo.end) * len(coverageData))
+        coverageData = coverageData[startIndex:endIndex]
 
-        elif self.plotType == 1:
-        
-            coverageChunks = [chromo.coverage[i:i+self.parentWidget().bpWindow] for i in range(0,len(chromo.coverage),self.parentWidget().bpWindow)]
-            for chunk in coverageChunks:
-                val = sum(chunk) / len(chunk)
-                if val > maxCov:
-                    val = maxCov
-                if val < minCov:
-                    val = minCov
-                #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
-                self.coverageData.append(2*val/normValue)
-                
-            #gives the centromere regions the value 2    
-            for pos in centromerePos:
-                for index in range(int(round(pos[0]/(self.parentWidget().bpWindow*1000),0)),int(round(pos[1]/(self.parentWidget().bpWindow*1000),0))):
-                    self.coverageData[index] = 2    
+        #Draw the y axis
+        leftLine = QLineF(self.graphArea.bottomLeft(),self.graphArea.topLeft())
+        rightLine = QLineF(self.graphArea.bottomRight(),self.graphArea.topRight())
+        self.mainScene.addLine(leftLine)
+        self.mainScene.addLine(rightLine)
+        #Set increments for axes
+        yAxisIncrement = self.graphArea.height() / (self.maxCoverage*2)
+        xAxisIncrement = self.graphArea.width() / 10
 
-        
-            self.ax.scatter(range(len(self.coverageData)),self.coverageData, c=self.coverageData, cmap= colorMap, norm=colorNorm, picker=True)
-            xLabelText = "Position (x" + str(self.parentWidget().bpWindow) + " kb)"
-            self.dataList = self.coverageData
-            
-            self.dataX = range(len(self.coverageData))
-            self.dataY = self.coverageData
-            
-                
-        #Create an input validator for the manual x range input boxes, range is no of bins
-        self.xRangeValidator = QIntValidator(0,len(self.dataList),self)
-        self.minXSet.setValidator(self.xRangeValidator)
-        self.maxXSet.setValidator(self.xRangeValidator)
-        self.minXSet.setText("0")
-        self.maxXSet.setText(str(len(self.dataList)))
-        self.minXSet.returnPressed.connect(self.updateXRange)
-        self.maxXSet.returnPressed.connect(self.updateXRange)
-        self.ax.set_xlim(0,len(self.dataList))
-        self.ax.set_ylim(minCov/normValue,maxCov/normValue)
-        self.ax.set_title("Contig " + chromo.name)
-        self.ax.set_xlabel(xLabelText)
-        self.ax.set_ylabel("Coverage")
-        self.canvas.updateGeometry()
-        self.canvas.draw()
+        #Draw markings for the limits
+        dupLine = QLineF( QPointF(self.graphArea.left(),self.graphArea.bottom()-self.dupLimit*yAxisIncrement),
+                          QPointF(self.graphArea.right(),self.graphArea.bottom()-self.dupLimit*yAxisIncrement) )
+        delLine = QLineF( QPointF(self.graphArea.left(),self.graphArea.bottom()-self.delLimit*yAxisIncrement),
+                          QPointF(self.graphArea.right(),self.graphArea.bottom()-self.delLimit*yAxisIncrement) )
+        dupLineItem = QGraphicsLineItem(dupLine)
+        dupLineItem.setPen(QPen(Qt.darkRed))
+        dupLineItem.setOpacity(0.6)
+        delLineItem = QGraphicsLineItem(delLine)
+        delLineItem.setPen(QPen(Qt.darkRed))
+        delLineItem.setOpacity(0.6)
+        self.mainScene.addItem(dupLineItem)
+        self.mainScene.addItem(delLineItem)
 
-    def shadow(self, data, dupLimit, delLimit, intervalSize):
-    
-        #code for shadowing
-        xFillValuesHigh = []
-        xCounterHighStart = 0
-        xCounterHighEnd = 0
-        xCounter = 0
-        #Collecting consecutive points in intervals where the coverage is above dupLimit
-        for y_value in data:
-            xCounter += 1
-            if y_value > dupLimit:
-                xCounterHighEnd += 1
+        #Create y ticks (as times average genome coverage), also height markers
+        markerPen = QPen()
+        markerPen.setStyle(Qt.DashLine)
+        for i in range(0,int(2*self.maxCoverage)+1):
+            yTickPath = QPainterPath()
+            point = QPointF(self.graphArea.left(), self.graphArea.bottom() - (i)*yAxisIncrement)
+            yTickPath.moveTo(point)
+            line = QLineF()
+            line.setP1(yTickPath.currentPosition())
+            line.setP2(yTickPath.currentPosition() + QPointF(self.graphArea.width(),0))
+            lineItem = QGraphicsLineItem(line)
+            if not(i == 0 or i == self.maxCoverage*2):
+                lineItem.setPen(markerPen)
+                lineItem.setOpacity(0.5)
+            self.mainScene.addItem(lineItem)
+            yTickLabelItem = QGraphicsTextItem(str(i))
+            yTickLabelItem.setPos(yTickPath.currentPosition() +  QPointF(-20, -10))
+            self.mainScene.addItem(yTickLabelItem)
+
+        #Create x ticks to show chromosome position
+        bpIncrement = limits[1] / 10
+        bpStart = limits[0]
+        for i in range(0,10):
+            point = QPointF(self.graphArea.left() + (i)*xAxisIncrement, self.graphArea.bottom())
+            line = QLineF()
+            line.setP1(point)
+            line.setP2(point + QPointF(0,15))
+            lineItem = QGraphicsLineItem(line)
+            self.mainScene.addItem(lineItem)
+            bpPosition = bpStart + i*bpIncrement
+            #Show the position in kbp
+            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition/1000)))
+            xTickLabelItem.setPos(point +  QPointF(0, 0))
+            self.mainScene.addItem(xTickLabelItem)
+
+        #Place the actual data values on the graph
+        if ptype == 0:
+
+            for index in range(len(coverageData)):
+                pointRect = QRectF( self.graphArea.left() + (index/len(coverageData))*self.graphArea.width() -2.5,
+                self.graphArea.bottom() - coverageData[index]*yAxisIncrement -2.5, 5, 5  )
+                pointItem = QGraphicsEllipseItem(pointRect)
+                if coverageData[index] < self.delLimit:
+                    pointItem.setBrush(QBrush(Qt.red))
+                elif coverageData[index] > self.dupLimit:
+                    pointItem.setBrush(QBrush(Qt.green))
+                else:
+                    pointItem.setBrush(QBrush(Qt.black))
+                #Set data with key 0 as 'plotItem' for convenience
+                pointItem.setData(0,'plotItem')
+                pointBp = round((pointRect.center().x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                pointItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
+                self.mainScene.addItem(pointItem)
+
+        elif ptype == 1:
+
+            #Create a gradient for coloring individual line items
+            offsetPoint = QPointF(self.graphArea.width()/2, 0)
+            linearGradient = QLinearGradient( QPointF(self.graphArea.bottomLeft()) + offsetPoint,
+                                              QPointF(self.graphArea.topLeft())  + offsetPoint )
+            linearGradient.setColorAt(1, Qt.green)
+            linearGradient.setColorAt(self.dupLimit/10, Qt.green)
+            linearGradient.setColorAt((self.dupLimit-0.005)/10, Qt.black)
+            linearGradient.setColorAt((self.delLimit+0.005)/10, Qt.black)
+            linearGradient.setColorAt(self.delLimit/10, Qt.red)
+            linearGradient.setColorAt(0, Qt.red)
+            colorBrush = QBrush(linearGradient)
+            colorPen = QPen()
+            colorPen.setBrush(colorBrush)
+
+            for index in range(len(coverageData)-1):
+                startPoint = QPointF( self.graphArea.left() + (index/len(coverageData))*self.graphArea.width(),
+                                      self.graphArea.bottom() - coverageData[index]*yAxisIncrement)
+                endPoint = QPointF( self.graphArea.left() + ((index+1)/len(coverageData))*self.graphArea.width(),
+                                      self.graphArea.bottom() - coverageData[index+1]*yAxisIncrement)
+                line = QLineF(startPoint, endPoint)
+                lineItem = QGraphicsLineItem(line)
+                lineItem.setPen(colorPen)
+                lineItem.setData(0,'plotItem')
+                pointBp = round((startPoint.x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                lineItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
+                self.mainScene.addItem(lineItem)
+
+    def updatePlot(self):
+        self.defineRectangles()
+        chromo = self.chromosomes[self.activeChromo]
+        #Save position and size of current chromosome marker before clearing
+        mRect = self.selectorItem.returnMarkerRect()
+        self.mainScene.clear()
+        self.bedScene.clear()
+        self.overviewScene.clear()
+        #Create position overview item
+        self.createOverview(chromo)
+        #Plot coverage
+        self.createPlot(chromo,self.plotType,self.limits)
+        #Create and add selection marker
+        self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.overviewScene.addItem(self.selectorItem)
+        bedSceneRect = self.bedScene.sceneRect()
+        self.trackViewArea.setHeight(bedSceneRect.height()+20)
+        self.bedView.setSceneRect(self.trackViewArea)
+        self.overviewView.setSceneRect(self.overviewArea)
+        self.mainView.setSceneRect(self.fitArea)
+        #If this chromosome has any bed tracks, add these
+        if self.bedDict[chromo.name]:
+            self.addTracks(chromo)
+        self.excludeRegions()
+        #Exception when changing between views and variant table is old; needs to be fixed
+        #Should save the view's active chromosome and select this again on view change (in mainwin)
+        try:
+            self.markVariants()
+        except:
+            pass
+        self.update()
+
+    def defineRectangles(self):
+        size = self.mainView.size()
+        self.centerArea = QRectF(0,0,size.width(),size.height())
+        offsetPoint = QPointF(10,20)
+        self.fitArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
+        offsetPoint = QPointF(50,50)
+        self.graphArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
+        self.overviewArea = QRect(self.graphArea.left(),0,self.graphArea.width(),30)
+        self.trackArea = QRectF(self.graphArea.left(),0,self.graphArea.width(),50)
+        self.trackViewArea = QRectF(self.centerArea.left(),0,self.centerArea.width(),50)
+
+    def changePlotType(self,index):
+        self.plotType = index
+        self.updatePlot()
+
+    def updateLimits(self):
+        chromo = self.chromosomes[self.activeChromo]
+        #Find the marked region by looking at marker edges
+        markRect = self.selectorItem.returnMarkerRect()
+        regionStart = round((markRect.left() - self.overviewArea.left()) / self.overviewArea.width() * int(chromo.end))
+        if regionStart < 0:
+            regionStart = 0
+        regionLength = round(markRect.width() / self.overviewArea.width() * int(chromo.end))
+        if regionLength > int(chromo.end):
+            regionLength = int(chromo.end)
+        limits = [regionStart, regionLength]
+        self.limits = limits
+
+    def setActiveChromosome(self,chromoNumber,varTable):
+        #Before switching, save current marker for this chr
+        self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
+        self.activeChromo = chromoNumber
+        self.limits = [0,int(self.chromosomes[self.activeChromo].end)]
+        mRect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
+        self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.varTable = varTable
+        self.updateLimits()
+        self.updatePlot()
+
+    def addTracks(self,chromo):
+        self.defineRectangles()
+        self.updateLimits()
+        #Increase size of bed area in splitter to 100 if not showing
+        splitterSizes = self.splitter.sizes()
+        if splitterSizes[1] == 0:
+            self.splitter.setSizes([splitterSizes[0],100])
+        itemHeight = 15
+        itemY = self.trackArea.top()
+        maxLength = self.trackArea.width()
+        viewedBp = self.limits[1]
+        for bedLines in self.bedDict[chromo.name]:
+            #Uses the first letter of the bed file as track name. Better names might exist.
+            trackName = bedLines[0][0]
+            trackName = trackName[0]
+            trackNameItem = QGraphicsTextItem(trackName)
+            font = QFont()
+            font.setPointSize(12)
+            trackNameItem.setFont(font)
+            self.bedScene.addItem(trackNameItem)
+            trackNameItem.setPos(QPointF(self.trackArea.left()-20,itemY))
+            for line in bedLines:
+                if int(line[1]) >= self.limits[0] and int(line[2]) <= self.limits[1]+self.limits[0]:
+                    itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
+                    itemWidth = (int(line[2])-int(line[1])) / (viewedBp) * maxLength
+                    rect = QRectF(itemStart,itemY,itemWidth,itemHeight)
+                    #Only display items that are larger than 2 px(?) wide
+                    if rect.width() > 2:
+                        rectItem = BedRectItem(rect,line)
+                        rectItem.setBrush(Qt.green)
+                        self.bedScene.addItem(rectItem)
+                        toolText = line[3]
+                        textItem = QGraphicsTextItem(toolText)
+                        font = QFont()
+                        font.setPointSize(8)
+                        textItem.setFont(font)
+                        #Only display the name on the rect if there's space for it
+                        if textItem.boundingRect().width() < rectItem.boundingRect().width():
+                            #The item should not block events to underlying rect..
+                            self.bedScene.addItem(textItem)
+                            textItem.setPos(QPointF(itemStart,itemY))
+            itemY += itemHeight+10
+
+    #Reads a bed file and adds a list of bed elements for each chromosome
+    def addBed(self):
+        newBedDict = common.createBedDict()
+        #For each constructed list, search for appropriate chromosome to insert into
+        for key in newBedDict.keys():
+            if key in self.bedDict.keys():
+                self.bedDict[key].append(newBedDict[key])
+        self.updatePlot()
+
+    def markVariants(self):
+        chromo = self.chromosomes[self.activeChromo]
+        variants = common.returnVariants(chromo,self.varTable)
+        for variant in variants:
+            bpStart = variant[1]
+            bpEnd = variant[3]
+            if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                pen = QPen()
+                pen.setStyle(Qt.DashLine)
+                regionGraphic = QGraphicsRectItem(regionRect)
+                regionGraphic.setBrush(Qt.red)
+                regionGraphic.setPen(pen)
+                regionGraphic.setOpacity(0.6)
+                self.mainScene.addItem(regionGraphic)
+
+    #Reads a tab file (with GC content) and adds a list of excluded regions in each chromosome
+    def addExcludeGCFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
+        "tab files (*.tab)")[0]
+        if excludeFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Read each line and look for positions markd with (-1)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, pos1, pos2, value
+                if line[3] == '-1.0':
+                    region = [int(line[1]), int(line[2])]
+                    if line[0] in self.excludeDict:
+                        self.excludeDict[line[0]].append(region)
+        self.updatePlot()
+
+    #Reads a tab file (with any defined region) and adds a list of excluded regions in each chromosome
+    def addExcludeFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify exclude file",QDir.currentPath(),
+        "exclude files (*.tab *.txt)")[0]
+        if excludeFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, start, end
+                region = [int(line[1]), int(line[2])]
+                if line[0] in self.excludeDict:
+                    self.excludeDict[line[0]].append(region)
+        self.updatePlot()
+
+    #Iterates through excluded regions in active chromsome and removes plot points
+    #Might be done in a more efficient way considering performance issues
+    def excludeRegions(self):
+        chromo = self.chromosomes[self.activeChromo]
+        for region in self.excludeDict[chromo.name]:
+            bpStart = region[0]
+            bpEnd = region[1]
+            if bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                intersectingItems = self.mainScene.items(regionRect)
+                for item in intersectingItems:
+                     if item.data(0) == 'plotItem':
+                         self.mainScene.removeItem(item)
+
+#Handles events for main graph area
+class CoverageGraphicsView(QGraphicsView):
+
+    def __init__(self,scene,otherView,parent):
+        super().__init__(scene)
+        #Takes another view to which commands are propagated
+        self.connectedView = otherView
+        self.parent = parent
+
+    def wheelEvent(self,event):
+        if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
+            self.scale(0.9,0.9)
+            self.connectedView.scale(0.9,1)
+            self.connectedView.horizontalScrollBar().setValue(self.horizontalScrollBar().value())
+        elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
+            self.scale(1.1,1.1)
+            self.connectedView.scale(1.1,1)
+            self.connectedView.horizontalScrollBar().setValue(self.horizontalScrollBar().value())
+        else:
+            QGraphicsView.wheelEvent(self, event)
+
+#Graphics view for bed tracks, with most events disabled
+class BedGraphicsView(QGraphicsView):
+
+    def __init__(self,scene):
+        super().__init__(scene)
+
+    def mouseMoveEvent(self,event):
+        pass
+
+    def wheelEvent(self,event):
+        #Only allow vertical scroll
+        if event.orientation() == Qt.Vertical:
+            QGraphicsView.wheelEvent(self, event)
+        else:
+            pass
+
+    def mousePressEvent(self,event):
+        item = self.itemAt(event.pos())
+        if item and item.data(0) == 'bedRect':
+            item.toggleMarked()
+            menu = QMenu()
+            linkAct = QAction("OMIM search: " + item.bedText, self)
+            linkAct.triggered.connect(lambda: self.openLink(item.bedText))
+            menu.addAction(linkAct)
+            menu.exec_(QCursor.pos())
+            item.toggleMarked()
+
+    def contextMenuEvent(self,event):
+        menu = QMenu()
+        #Should connect to a function to change default color for a track
+        trackColorAct = QAction('Select track colors',self)
+        menu.addAction(trackColorAct)
+        menu.exec_(QCursor.pos())
+
+    #Primitive function to search for bed item name in OMIM database
+    #Currently opens a browser and simply searches for the term, but could use omim REST-api?
+    def openLink(self,linkText):
+        linkUrl = QUrl("https://www.ncbi.nlm.nih.gov/omim/?term=" + linkText)
+        QDesktopServices.openUrl(linkUrl)
+
+#Bed graphic item with some convenience functions for marking etc
+class BedRectItem(QGraphicsRectItem):
+
+    def __init__(self,rect,bedFields):
+        super().__init__(rect)
+        self.bedText = bedFields[3]
+        self.setToolTip(self.bedText)
+        self.marked = False
+        self.setData(0,"bedRect")
+
+    def toggleMarked(self):
+        if not self.marked:
+            pen = self.pen()
+            pen.setStyle(Qt.DashLine)
+            pen.setBrush(Qt.red)
+        else:
+            pen = QPen()
+        self.setPen(pen)
+        self.marked = not self.marked
+
+    def setMarked(self):
+        pen = self.pen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+        self.marked = True
+
+    def setUnmarked(self):
+        pen = QPen()
+        self.setPen(pen)
+        self.marked = False
+
+class AreaSelectorItem(QGraphicsItemGroup):
+
+    def __init__(self,markRect,fullRect,parent):
+        super().__init__()
+        self.parent = parent
+        self.originalRect = QRectF(fullRect)
+        self.setAcceptHoverEvents(True)
+        pen = QPen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.markRect = QGraphicsRectItem(markRect)
+        self.markRect.setPen(pen)
+        self.addToGroup(self.markRect)
+        #Add some invisible margin so we can get mouse event margin outside edges
+        leftRect = QRectF(self.markRect.rect().topLeft(), self.markRect.rect().bottomLeft())
+        leftRect.setRight(leftRect.right() + 5)
+        leftRect.setLeft(leftRect.left() - 5)
+        self.leftDragItem = QGraphicsRectItem(leftRect)
+        self.leftDragItem.setOpacity(0)
+        self.addToGroup(self.leftDragItem)
+        rightRect = QRectF(self.markRect.rect().topRight(), self.markRect.rect().bottomRight())
+        rightRect.setLeft(rightRect.right() - 5)
+        rightRect.setRight(rightRect.right() + 5)
+        self.rightDragItem = QGraphicsRectItem(rightRect)
+        self.rightDragItem.setOpacity(0)
+        self.addToGroup(self.rightDragItem)
+        self.setAcceptedMouseButtons(Qt.LeftButton)
+        self.draggingLeft = False
+        self.draggingRight = False
+        self.movingRect = False
+
+    def returnMarkerRect(self):
+        return self.markRect.rect()
+
+    def hoverMoveEvent(self,event):
+        if ( self.leftDragItem.contains(event.pos()) or self.rightDragItem.contains(event.pos()) ):
+            self.setCursor(Qt.SizeHorCursor)
+        else:
+            self.setCursor(Qt.OpenHandCursor)
+        QGraphicsItem.hoverMoveEvent(self,event)
+
+    def mousePressEvent(self,event):
+        if self.cursor().shape() == Qt.OpenHandCursor:
+            self.setCursor(Qt.ClosedHandCursor)
+            self.movingRect = True
+            self.lastXPos = event.pos().x()
+        if self.leftDragItem.contains(event.pos()):
+            self.draggingLeft = True
+        elif self.rightDragItem.contains(event.pos()):
+            self.draggingRight = True
+
+    def mouseMoveEvent(self,event):
+        xPos = event.pos().x()
+        #Should not be able to be dragged outside of full size boundary,
+        #or too close to selection opposite edge
+        if ( self.draggingLeft and xPos < (self.markRect.rect().right()-10) ):
+            if xPos < self.originalRect.left():
+                xPos = self.originalRect.left()
+            newRect = self.markRect.rect()
+            newRect.setLeft(xPos)
+            self.markRect.setRect(newRect)
+        elif (self.draggingRight and xPos > (self.markRect.rect().left()+10) ):
+            if xPos > self.originalRect.right():
+                xPos = self.originalRect.right()
+            newRect = self.markRect.rect()
+            newRect.setRight(xPos)
+            self.markRect.setRect(newRect)
+        elif self.movingRect:
+            newRect = self.markRect.rect()
+            if self.markRect.rect().left() < self.originalRect.left():
+                translateBy = 0
+                newRect.moveLeft(self.originalRect.left())
+            elif self.markRect.rect().right() > self.originalRect.right():
+                translateBy = 0
+                newRect.moveRight(self.originalRect.right())
             else:
-                xFillValuesHigh.append([xCounterHighStart, xCounterHighEnd + xCounterHighStart])
-                xCounterHighStart = xCounter
-                xCounterHighEnd = 0
+                translateBy = xPos - self.lastXPos
+            newRect.translate(translateBy,0)
+            self.markRect.setRect(newRect)
+            self.lastXPos = xPos
 
-        xFillValuesLow = []
-        xCounterLowStart = 0
-        xCounterLowEnd = 0
-        xCounter = 0
-        #Collecting consecutive points in intervals where the coverage is below delLimit
-        for y_value in data:
-            xCounter += 1
-            if y_value < delLimit:
-                xCounterLowEnd += 1
-            else:
-                xFillValuesLow.append([xCounterLowStart, xCounterLowEnd + xCounterLowStart])
-                xCounterLowStart = xCounter
-                xCounterLowEnd = 0   
-    #"Shadows" areas where the coverage is below delLimit and above dupLimit in the graph for intervals (defined as range(start,stop) larger than 10
-        for values in xFillValuesLow:
-            start = values[0]
-            stop = values[1]
-            if (stop - start) > intervalSize:
-                self.ax.fill_between(range(start, stop), delLimit, data[start:stop], facecolor='r', interpolate=True, edgecolor = 'r')               
-        for values in xFillValuesHigh:
-            start = values[0]
-            stop = values[1]
-            if (stop - start) > intervalSize:
-                self.ax.fill_between(range(start, stop), dupLimit, data[start:stop], facecolor='g', interpolate = True, edgecolor = 'g')
-        
-    def getMean(self, data):
-        
-        #the goal of this function is to increase the amount of data points 10 times
-        #to achieve this the mean is taken between two adjacent data points and added to a new list along with the old data points
-        #example: [5, 10, 15, 20] -> [5, 7.5, 10, 12.5, 15, 17.5, 20]
-        #this is done three times
-        newData = []
-        newDataTemp = []
-        newDataMean = []
-        extendedData = []
-        
-        #if data has x data points, newData will have 2x-1
-        for index in range(len(data)):   
-            if index < len(data)-1:
-                newData.append(data[index])
-                newData.append((data[index] + data[index+1])/2)
-            else:
-                newData.append(data[index])  
-        
-        #if data has x data points, newDataTemp will have 2*(2x-1)-1 = 4x-3
-        for index in range(len(newData)):   
-            if index < len(newData)-1:
-                newDataTemp.append(newData[index])
-                newDataTemp.append((newData[index] + newData[index+1])/2)
-            else:
-                newDataTemp.append(newData[index])   
-        
-        #if data has x data points, newDataMean will have 2*(2*(2x-1)-1)-1 = 2*(4x-3)-1 = 8x-7
-        for index in range(len(newDataTemp)):   
-            if index < len(newDataTemp)-1:
-                newDataMean.append(newDataTemp[index])
-                newDataMean.append((newDataTemp[index] + newDataTemp[index+1])/2)
-            else:
-                newDataMean.append(newDataTemp[index]) 
-                
-        #if data has x data points then, in order to get 10x data points we need to add 2x+7 to 8x-7
-        #this is done by taking the mean 2x+7 times and spacing these out evenly. 
-        oldLength = len(data)
-        newLength = len(newDataMean)
-        spacing = round((newLength / ((2*oldLength)+7)),0)
-
-        for index in range(len(newDataMean)):
-            if index%spacing == 0 and index < len(newDataMean)-1:
-                extendedData.append(newDataMean[index])
-                extendedData.append((newDataMean[index] + newDataMean[index+1])/2)
-            else:
-                extendedData.append(newDataMean[index])
-        
-        return extendedData
-
-    def _onMotion(self, event):
-        annotations = []
-        collisionFound = False
-        if event.xdata != None and event.ydata != None:
-            for i in self.dataX:
-                radius = 2
-                if abs(event.xdata - i) < radius and abs(event.ydata - self.dataY[i]) < 0.1:
-                    top = tip='x=%f\ny=%f\nX=%f\nY=%f' % (event.xdata, event.ydata, i, self.dataY[i])
-                    annote = self.ax.annotate(str(i) + " " + str(self.dataY[i]), xy= (i, self.dataY[i]))
-                    annotations.append(annote)
-                    collisionFound = True
-                    break
-            self.canvas.draw()        
-        if not collisionFound:
-            for i in range(len(annotations)):
-                annotations[i].set_visible(False)
-            self.canvas.draw()
-    
-    def on_key_press(self, event):
-        key_press_handler(event, self.canvas, self.mpl_toolbar)
-
-    def updateXRange(self):
-        self.ax.set_xlim(int(self.minXSet.text()),int(self.maxXSet.text()))
-        self.canvas.draw()
-
-    def updateSetLimits(self,event):
-        xmin,xmax = self.ax.get_xlim()
-        if xmin < 0:
-            xmin = 0
-        if xmax > len(self.dataList):
-            xmax = len(self.dataList)
-        self.ax.set_xlim(xmin,xmax)
-        self.minXSet.setText(str(int(xmin)))
-        self.maxXSet.setText(str(int(xmax)))
-
-    #Opens a context menu on ctrl+right click on a plot
-    def onClick(self, event):
-        self.clickX = event.xdata
-        self.clickY = event.ydata
-        if event.button == 3 and event.key == 'control':
-           menu = QMenu()
-           self.clickX = event.xdata
-           self.clickY = event.ydata
-           addPlotTextAct = QAction('Insert text',self)
-           addPlotTextAct.triggered.connect(self.addPlotText)
-           deletePlotAct = QAction('Delete plot',self)
-           deletePlotAct.triggered.connect(self.deletePlot)
-           menu.addAction(addPlotTextAct)
-           menu.addAction(deletePlotAct)
-           canvasHeight = int(self.figure.get_figheight()*self.figure.dpi)
-           menu.exec_(self.mapToGlobal(QPoint(event.x,canvasHeight-event.y)))
-
-    #Adds a given text to the clicked location (in data coordinates) to the plot
-    def addPlotText(self):
-        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
-        if ok and text:
-            self.ax.text(self.clickX, self.clickY, text)
-            self.canvas.draw()
-
-    def deletePlot(self):
-        self.hide()
-        self.parentWidget().removeChromoPlot(self)
+    def mouseReleaseEvent(self,event):
+        self.pressRelease = event.pos()
+        self.setCursor(Qt.OpenHandCursor)
+        self.draggingLeft = False
+        self.draggingRight = False
+        self.movingRect = False
+        #Make sure marker is not outside of limits
+        newRect = self.markRect.rect()
+        if self.markRect.rect().left() < self.originalRect.left():
+            newRect.moveLeft(self.originalRect.left())
+        elif self.markRect.rect().right() > self.originalRect.right():
+            newRect.moveRight(self.originalRect.right())
+        self.markRect.setRect(newRect)
+        #Place drag margins on edges
+        newRect = self.leftDragItem.rect()
+        newRect.moveLeft(self.markRect.rect().left()-newRect.width()/2)
+        self.leftDragItem.setRect(newRect)
+        newRect = self.rightDragItem.rect()
+        newRect.moveRight(self.markRect.rect().right()+newRect.width()/2)
+        self.rightDragItem.setRect(newRect)
+        #Update the plot on release
+        self.parent.updateLimits()
+        self.parent.updatePlot()

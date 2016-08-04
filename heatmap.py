@@ -1,178 +1,110 @@
+import common
 from PySide.QtCore import *
 from PySide.QtGui import *
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import numpy as np
-from matplotlib.figure import Figure
-from matplotlib.backend_bases import key_press_handler
-from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
-from matplotlib.backends.backend_qt4agg import (
-    FigureCanvasQTAgg as FigureCanvas,
-    NavigationToolbar2QT as NavigationToolbar)
+import math
 
-class HeatmapScrollArea(QScrollArea):
+class HeatmapView(QGraphicsView):
 
-    def __init__(self,dataDict):
-        super().__init__()
+    def __init__(self,dataDict, parent):
+
+        self.scene = QGraphicsScene()
         self.type = "heatmap"
-        self.subview = HeatmapView(dataDict)
-        self.setWidget(self.subview)
-        self.setWidgetResizable(True)
-
-    def viewSettings(self):
-        self.subview.viewSettings()
-
-    def closeOpenWindows(self):
-        try:
-            self.subview.chDia.close()
-        except:
-            pass
-
-    def returnActiveDataset(self):
-        return self.subview.returnActiveDataset()
-
-
-class HeatmapView(QWidget):
-
-    def __init__(self,dataDict):
-        super().__init__()
+        super().__init__(self.scene, parent)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
-        self.subWindows = []
-        self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
-        self.grid = QGridLayout()
-        self.setLayout(self.grid)
+        self.variantNames = {"BND":"Break end", "DEL":"Deletion", "DUP":"Duplication", "IDUP":"Interspersed duplication", "INS":"Insertion", "INV":"Inversion", "TDUP":"Tandem duplication", "TLOC":"Translocation"}
         self.resize(QDesktopWidget().availableGeometry(self).size())
-        self.maxColumns = 2
         self.bpWindow = 50
         self.minCoverage = 0
         self.maxCoverage = 5
+        self.stainColors = parent.stainColors
+        self.activeIndex = 0
+        self.color = QColor(self.stainColors['heatmapColor'])
+        self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        self.rubberBand.hide()
+        self.origin = QPoint(0,0)
+        self.binSize = 5000
+        self.chromoA = self.chromosomes[0]
+        self.chromoB = self.chromosomes[0]
+        self.mapping = "DEL"
         self.createSettings()
         self.createChInfo()
-        self.showChInfo()
+        self.setRenderHints(QPainter.Antialiasing)
+        self.resize(QDesktopWidget().availableGeometry(self).size())
+        self.show()
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
 
     def returnActiveDataset(self):
         return self.dataDict
 
-    #A dialog window used to gather data from the user (chromA, chromB, binSize)
-    def addHeatmap(self):
-        addDialog = QDialog()
-        addDialog.setWindowTitle("Add plot")
-        applyButton = QPushButton('Ok', addDialog)
-        applyButton.clicked.connect(addDialog.accept)
-        chromoBoxA = QComboBox()
-        chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-        chromoBoxA.addItems(chromoStrings)
-        chrLabelA = QLabel("Map chromosome: ")
-        chromoBoxB = QComboBox()
-        chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-        chromoBoxB.addItems(chromoStrings)
-        chrLabelB = QLabel("To chromosome: ")
-        binSizeLabel = QLabel("Bin size (kb): ")
-        binSizeData = QLineEdit()
-        addDialog.layout = QGridLayout(addDialog)
-        addDialog.layout.addWidget(chrLabelA,0,0)
-        addDialog.layout.addWidget(chromoBoxA,0,1)
-        addDialog.layout.addWidget(chrLabelB,1,0)
-        addDialog.layout.addWidget(chromoBoxB,1,1)
-        addDialog.layout.addWidget(binSizeLabel,2,0)
-        addDialog.layout.addWidget(binSizeData,2,1)
-        addDialog.layout.addWidget(applyButton,3,0)
-        choice = addDialog.exec_()
-        if choice == QDialog.Accepted:
-            chromoA = self.chromosomes[chromoBoxA.currentIndex()]
-            chromoB = self.chromosomes[chromoBoxB.currentIndex()]
-            binSize = int(binSizeData.text())
-            #if the chromosome is mapped to itself the variant needs to be chosen, see mappingDialog
-            if chromoA == chromoB:
-                self.mappingDialog(chromoA, chromoB, binSize)
-            #if the chromosomes are different then the variant to be mapped is chosen to be translocations "TLOC"
-            else:
-                heatMap = HeatmapWindow(chromoA, chromoB, binSize, "TLOC", self)
-                self.subWindows.append(heatMap)
-                self.arrangePlots()
-
-    def mappingDialog(self, chromoA, chromoB, binSize):
-        self.chromoA = chromoA
-        self.chromoB = chromoB
-        self.binSize = binSize
-        addDialog = QDialog()
-        addDialog.setWindowTitle("Select mapping")
-        applyButton = QPushButton('Ok', addDialog)
-        applyButton.clicked.connect(addDialog.accept)
-        mappingBox = QComboBox()
-        #the below variants are the ones the user can chose from
-        mappingStrings = ["Deletion", "Duplication", "Interspersed duplication", "Tandem duplication", "Inversion", "Insertion", "Break end"]
-        mappingBox.addItems(mappingStrings)
-        mappingLabel = QLabel("Map the chromosome with respect to which variant: ")
-        addDialog.layout = QGridLayout(addDialog)
-        addDialog.layout.addWidget(mappingLabel,0,0)
-        addDialog.layout.addWidget(mappingBox,0,1)
-        addDialog.layout.addWidget(applyButton,1,0)
-        choice = addDialog.exec_()
-        if choice == QDialog.Accepted:
-            #A dict is used to translate the variant names
-            mapping = self.variantNames[mappingBox.currentText()]
-            heatMap = HeatmapWindow(self.chromoA, self.chromoB, self.binSize, mapping, self)
-            self.subWindows.append(heatMap)
-            self.arrangePlots()
-        return;
-
-    def arrangePlots(self):
-        currentColumn = 0
-        currentRow = 0
-        for plot in self.subWindows:
-            self.grid.addWidget(plot,currentRow,currentColumn)
-            if currentColumn == self.maxColumns-1:
-                currentRow += 1
-                currentColumn = 0
-            else:
-                currentColumn += 1
-        self.update()
-
-    #Removes a plot and rearranges existing plots
-    def removeHeatmap(self,plot):
-        self.subWindows.remove(plot)
-        self.grid.removeWidget(plot)
-        plot.destroy()
-        self.arrangePlots()
-
+    def changeMappingType(self, mapping):
+        self.variantNames = {"Break end":"BND", "Deletion":"DEL", "Duplication":"DUP", "Interspersed duplication":"IDUP", "Insertion":"INS", "Inversion":"INV", "Tandem duplication":"TDUP", "Translocation":"TLOC"}
+        self.mapping = self.variantNames[mapping]
+        if self.chromoA is self.chromoB and (self.mapping == "DEL" or self.mapping == "BND" or self.mapping == "DUP" or self.mapping == "IDUP" or self.mapping == "INS" or self.mapping == "INV" or self.mapping == "TDUP"):
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        elif self.chromoA is not self.chromoB and self.mapping == "TLOC":
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        
+    def changeBinsize(self, binSize):
+        self.binSize = int(binSize)
+        self.clearScene()
+        self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+    
+    def changeChromoA(self, chromoA):
+        self.chromoA = self.chromosomes[chromoA]
+        if self.chromosomes[chromoA] is self.chromoB and (self.mapping == "DEL" or self.mapping == "BND" or self.mapping == "DUP" or self.mapping == "IDUP" or self.mapping == "INS" or self.mapping == "INV" or self.mapping == "TDUP"):
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        elif self.chromosomes[chromoA] is not self.chromoB and self.mapping == "TLOC":
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        
+    def changeChromoB(self, chromoB):
+        self.chromoB = self.chromosomes[chromoB]
+        if self.chromosomes[chromoB] is self.chromoA and (self.mapping == "DEL" or self.mapping == "BND" or self.mapping == "DUP" or self.mapping == "IDUP" or self.mapping == "INS" or self.mapping == "INV" or self.mapping == "TDUP"):
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        elif self.chromosomes[chromoB] is not self.chromoA and self.mapping == "TLOC":
+            self.clearScene()
+            self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+            
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
         #create header labels to distinguish different settings.
-        verticalHeaders = ["bpWindow", "minCoverage", "maxCoverage"]
+        verticalHeaders = ["minCoverage", "maxCoverage"]
         self.settingsModel.setVerticalHeaderLabels(verticalHeaders)
-        maxColumnsText = QStandardItem("Number of columns")
-        maxColumnsText.setEditable(False)
-        maxColumnsText.setToolTip("Number of columns to arrange diagrams in")
-        maxColumnsData = QStandardItem()
-        maxColumnsData.setData(self.maxColumns,0)
-        maxColumnsData.setEditable(True)
-        self.settingsModel.setItem(0,0,maxColumnsText)
-        self.settingsModel.setItem(0,1,maxColumnsData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
 
-    def viewSettings(self):
-        self.settingsList = QTableView()
-        self.settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.settingsList.setShowGrid(False)
-        self.settingsList.horizontalHeader().hide()
-        self.settingsList.verticalHeader().hide()
-        self.settingsList.setModel(self.settingsModel)
-        self.settingsList.setTextElideMode(Qt.ElideNone)
-        self.settingsDia = QDialog(self)
-        self.settingsDia.setWindowTitle("Settings")
-        applyButton = QPushButton('Apply', self.settingsDia)
-        applyButton.clicked.connect(self.settingsDia.accept)
-        self.settingsDia.layout = QGridLayout(self.settingsDia)
-        self.settingsDia.layout.addWidget(self.settingsList,0,0,1,3)
-        self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
-        self.settingsDia.show()
+    def closeOpenWindows(self):
+        try:
+            self.chDia.close()
+        except:
+            pass
+        
+    def updateSettings(self):
+        #Go through every row in the settings model and update accordingly
+        self.color = QColor(self.stainColors['heatmapColor'])
+        self.clearScene()
+        self.updateHeatmap(self.activeIndex)
 
-    def updateSettings(self,item):
-        if item.row() == 0:
-            self.maxColumns = item.data(0)
+    #Creates and returns a widget with this view's settings
+    def returnSettingsWidget(self):
+        settingsWidget = QWidget()
+        settingsLayout = QGridLayout()
+        settingsList = QTableView()
+        settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        settingsList.setShowGrid(False)
+        settingsList.horizontalHeader().hide()
+        settingsList.verticalHeader().hide()
+        settingsList.setModel(self.settingsModel)
+        settingsList.setTextElideMode(Qt.ElideNone)
+        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsWidget.setLayout(settingsLayout)
+        return settingsWidget
 
     #Creates data model for info window
     def createChInfo(self):
@@ -219,210 +151,227 @@ class HeatmapView(QWidget):
         self.chDia.setMinimumSize(450,400)
         self.chDia.show()
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
+    def returnChromoInfoWidget(self):
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
+        viewVarButton.clicked.connect(self.viewVariants)
+        viewVarButton.setToolTip("View variants in chromosome")
+        #Button for adding variants
+        addVariantButton = QPushButton(QIcon("icons/new.png"),"")
+        addVariantButton.clicked.connect(self.addVariant)
+        addVariantButton.setToolTip("Add custom variant")
+        chromoInfoLayout = QGridLayout()
+        chromoInfoLayout.addWidget(self.chList,0,0,1,2)
+        chromoInfoLayout.addWidget(viewVarButton,1,0,1,1)
+        chromoInfoLayout.addWidget(addVariantButton,1,1,1,1)
+        chromoWidget = QWidget()
+        chromoWidget.setLayout(chromoInfoLayout)
+        return chromoWidget
 
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
+            viewVarDia = common.createVariantDia(chromo,self)
             viewVarDia.show()
 
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        return varWidget
+
     def addVariant(self):
-        #Adds a variant to selected chromosomes. Some models still have to be updated.
-        #Not sure how to best handle input yet.
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            addVariantDialog = QDialog()
-            addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)
-            applyButton = QPushButton('Ok', addVariantDialog)
-            applyButton.clicked.connect(addVariantDialog.accept)
-            cancelButton = QPushButton('Cancel', addVariantDialog)
-            cancelButton.clicked.connect(addVariantDialog.reject)
-            locBoxValidator = QIntValidator(self)
-            locBoxValidator.setBottom(0)
-            locABox = QLineEdit()
-            locBBox = QLineEdit()
-            locABox.setValidator(locBoxValidator)
-            locBBox.setValidator(locBoxValidator)
-            chromoBox = QComboBox()
-            chromoStrings = [chromo.name for chromo in self.chromosomes if not "GL" in chromo.name]
-            chromoBox.addItems(chromoStrings)
-            altBox = QLineEdit()
-            geneBox = QLineEdit()
-            locALabel = QLabel("Position A: ")
-            chromoLabel = QLabel("Chromosome B: ")
-            locBLabel = QLabel("Position B: ")
-            altLabel = QLabel("ALT: ")
-            geneLabel = QLabel("GENE(S): ")
-            addVariantDialog.layout = QGridLayout(addVariantDialog)
-            addVariantDialog.layout.addWidget(locALabel,0,0)
-            addVariantDialog.layout.addWidget(locABox,0,1)
-            addVariantDialog.layout.addWidget(chromoLabel,1,0)
-            addVariantDialog.layout.addWidget(chromoBox,1,1)
-            addVariantDialog.layout.addWidget(locBLabel,2,0)
-            addVariantDialog.layout.addWidget(locBBox,2,1)
-            addVariantDialog.layout.addWidget(altLabel,3,0)
-            addVariantDialog.layout.addWidget(altBox,3,1)
-            addVariantDialog.layout.addWidget(geneLabel,4,0)
-            addVariantDialog.layout.addWidget(geneBox,4,1)
-            addVariantDialog.layout.addWidget(applyButton,5,0)
-            addVariantDialog.layout.addWidget(cancelButton,5,1)
-            choice = addVariantDialog.exec_()
-            if choice == QDialog.Accepted:
-                #END field should only be filled if chrB is the same
-                if chromoBox.currentText() == chromo.name:
-                    end = locBBox.text()
-                else:
-                    end = "."
-                chromo.addVariant(locABox.text(),altBox.text(),"",end,geneBox.text(),"")
+            common.addVariant(chromo,self.chromosomes)
 
-class HeatmapWindow(QWidget):
-
-    def __init__(self, chromoA, chromoB, binSize, mapping, parent):
-        super().__init__(parent)
-        #A dict for translating variant names
+    def createHeatmap(self, chromoA, chromoB, binSize, mapping):
         self.variantNames = {"BND":"Break end", "DEL":"Deletion", "DUP":"Duplication", "IDUP":"Interspersed duplication", "INS":"Insertion", "INV":"Inversion", "TDUP":"Tandem duplication", "TLOC":"Translocation"}
-        self.chromoA = chromoA
-        self.chromoB = chromoB
-        #the bin size is in kb and needs therefore be multiplied by 1000
-        self.binSize = binSize * 1000
-        self.mapping = mapping
+        binSize = binSize*1000
         self.matrices = []
         self.activeIndex = 0
-        self.setMinimumSize(500,500)
-        self.figure = Figure(figsize=(5,2),dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setParent(self)
-        self.canvas.setFocusPolicy( Qt.ClickFocus )
-        self.canvas.setFocus()
+        zoomLevel = 0
+        zoomFactor = 10
+        xAxis = int(round(int(chromoA.end)/binSize,0))
+        yAxis = int(round(int(chromoB.end)/binSize,0))
 
-        self.mpl_toolbar = MplToolbar(self.canvas, self)
-        self.canvas.mpl_connect('button_release_event', self.onClick)
-
-        vbox = QVBoxLayout()
-        vbox.addWidget(self.canvas)
-        vbox.addWidget(self.mpl_toolbar)
-        self.setLayout(vbox)
-        self.ax = self.figure.add_subplot(111)
-        
-        xAxis = int(round(int(chromoA.end)/self.binSize,0))
-        yAxis = int(round(int(chromoB.end)/self.binSize,0))
-        
         if not chromoA.connections:
             chromoA.createConnections()
-        
-        A = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0)
-        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 1, xAxis, yAxis, 0, 0]
+
+        A = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel)
+        matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel]
         self.matrices.append([A, matrixInfo])
         self.updateHeatmap(self.activeIndex)
-        
-    def updateHeatmap(self, activeIndex):
 
-        self.figure.clear()
-        self.ax = self.figure.add_subplot(111)
-        
-        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart) = self.matrices[activeIndex][1]
+    def updateHeatmap(self, activeIndex):
+        self.clearScene()
+        (chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel) = self.matrices[activeIndex][1]
+        zoomFactor = math.pow(zoomFactor, -zoomLevel)
+        A = self.matrices[activeIndex][0]
         if mapping == "TLOC":
             startString = "Position"
             endString = "Position"
         else:
             startString = "Start position"
-            endString = "End position"        
-        
-        self.heatmap = self.ax.pcolormesh(self.matrices[activeIndex][0].T, cmap = plt.cm.coolwarm)
-        colorbar = self.figure.colorbar(self.heatmap)
-        colorbar.set_label("# of interactions")
+            endString = "End position"
+        size = self.size()
 
-        self.ax.set_xlim(0, xAxis)
-        self.ax.set_ylim(0, yAxis)
-        xlabels = []
-        ylabels = []
-        for i in range(xAxis):
-            if i%2:
-                xlabels.append(str(i*zoomFactor + xAxisStart))
-                ylabels.append(str(i*zoomFactor + yAxisStart))
-        self.ax.set_xticks(range(0,xAxis,2))
-        self.ax.set_yticks(range(0,yAxis,2))
-        self.ax.set_xticklabels(xlabels)
-        self.ax.set_yticklabels(ylabels)
-        self.ax.set_title("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
-        self.ax.set_ylabel(endString + " on chromosome " + chromoB.name + " (x" + str(binSize/1000) + "kb)")
-        self.ax.set_xlabel(startString + " on chromosome " + chromoA.name + " (x" + str(binSize/1000) + "kb)")
-        
-        self.canvas.draw()
+        containerRect = QRect(QPoint(50,50), QPoint(size.width()-50,size.height()-50))
+        #create and add axes to scene
+        xAxisPath = QPainterPath()
+        xAxisPath.moveTo(50,containerRect.height()-50)
+        xAxisPath.lineTo(containerRect.width()-250, containerRect.height()-50)
+        xAxisItem = QGraphicsPathItem(xAxisPath)
+        yAxisPath = QPainterPath()
+        yAxisPath.moveTo(50,containerRect.height()-50)
+        yAxisPath.lineTo(50, 50)
+        yAxisItem = QGraphicsPathItem(yAxisPath)
+        xAxisPath.moveTo(50, 50)
+        xAxisPath.lineTo(containerRect.width()-250, 50)
+        xAxisItemTop = QGraphicsPathItem(xAxisPath)
+        yAxisPath.moveTo(containerRect.width()-250, containerRect.height()-50)
+        yAxisPath.lineTo(containerRect.width()-250, 50)
+        yAxisItemRight = QGraphicsPathItem(yAxisPath)
+        self.graphArea = QGraphicsRectItem(QRectF(yAxisItem.boundingRect().topLeft(), xAxisItem.boundingRect().bottomRight()))
+        self.scene.addItem(self.graphArea)
+        self.scene.addItem(xAxisItem)
+        self.scene.addItem(yAxisItem)
+        self.scene.addItem(xAxisItemTop)
+        self.scene.addItem(yAxisItemRight)
+        #calculate the size of each element
+        self.elementWidth = xAxisItem.boundingRect().width()/xAxis
+        self.elementHeight = yAxisItem.boundingRect().height()/yAxis
 
-    def deletePlot(self):
-        self.hide()
-        self.parentWidget().removeHeatmap(self)
+        #since the y-axis is flipped, y values has an offset of yAxis - yInd - 1
+        for xInd in range(xAxis):
+            for yInd in range(yAxis):
+                elementPath = QPainterPath()
+                elementPath.addRect(xInd*self.elementWidth + xAxisItem.boundingRect().left(), yInd*self.elementHeight + yAxisItem.boundingRect().top(), self.elementWidth, self.elementHeight)
+                elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd*zoomFactor, yAxisStart + (yAxis - yInd - 1)*zoomFactor)
+                elementItem.setToolTip("x: " + str((xAxisStart + xInd*zoomFactor)*binSize*1000) + "bp\n" + "y: " + str((yAxisStart + (yAxis - yInd - 1)*zoomFactor)*binSize*1000) + "bp\n" + "#interactions: " +  str(A[yInd][xInd]))
+                #Color each element depending on how many "hits" they have, more hits -> lighter color
+                color = self.color.lighter(105*(1+(A[yInd][xInd])/(np.amax(A)+1)))
+                colorPen = QPen(QBrush(self.color),1)
+                elementItem.setPen(colorPen)
+                elementItem.setBrush(QBrush(color))
+                self.scene.addItem(elementItem)
 
-    #Opens a context menu on ctrl+right click on a plot
-    def onClick(self, event):
-        if event.button == 3:
-           menu = QMenu()
-           self.clickX = event.xdata
-           self.clickY = event.ydata
-           addPlotTextAct = QAction('Insert text',self)
-           addPlotTextAct.triggered.connect(self.addPlotText)
-           deletePlotAct = QAction('Delete plot',self)
-           deletePlotAct.triggered.connect(self.deletePlot)
-           zoomInAct = QAction('Zoom in on rectangle', self)
-           zoomInAct.triggered.connect(self.zoomIn)
-           menu.addAction(addPlotTextAct)
-           menu.addAction(deletePlotAct)
-           menu.addAction(zoomInAct)
-           canvasHeight = int(self.figure.get_figheight()*self.figure.dpi)
-           menu.exec_(self.mapToGlobal(QPoint(event.x,canvasHeight-event.y)))
+        #Creates a colorbar
+        #uses a gradient which goes from self.color at 0 interactions to the darkest color on the heatmap for max interactions
+        colorBarPath = QPainterPath()
+        colorBarPath.addRect(xAxisItem.boundingRect().right() + 75, yAxisItem.boundingRect().top(), 50, yAxisItemRight.boundingRect().height())
+        colorBarItem = QGraphicsPathItem(colorBarPath)
+        linearGradient = QLinearGradient(colorBarItem.boundingRect().bottomLeft() + QPointF(25,0), colorBarItem.boundingRect().topLeft() + QPointF(25,0))
+        linearGradient.setColorAt(0, self.color)
+        linearGradient.setColorAt(1, self.color.lighter(105*(1+(np.amax(A)/(np.amax(A)+1)))))
+        colorBarItem.setBrush(QBrush(linearGradient))
+        self.scene.addItem(colorBarItem)
 
-    #Adds a given text to the clicked location (in data coordinates) to the plot
-    def addPlotText(self):
-        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
-        if ok and text:
-            self.ax.text(self.clickX, self.clickY, text)
-            self.canvas.draw()
-    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart):
+        colorBarTick = QPainterPath()
+        lineBetween = QLineF(colorBarItem.boundingRect().bottomRight(), colorBarItem.boundingRect().bottomRight() + QPointF(5,0))
+        colorBarTick.moveTo(lineBetween.pointAt(1))
+        colorBarTick.lineTo(lineBetween.pointAt(0))
+        lineBetween = QLineF(colorBarItem.boundingRect().topRight(), colorBarItem.boundingRect().topRight() + QPointF(5,0))
+        colorBarTick.moveTo(lineBetween.pointAt(1))
+        colorBarTick.lineTo(lineBetween.pointAt(0))
+        colorBarTickItem = QGraphicsPathItem(colorBarTick)
+        colorBarTickLabelTopItem = QGraphicsTextItem(str(np.amax(A)))
+        colorBarTickLabelBottomItem = QGraphicsTextItem(str(np.amin(A)))
+        colorBarTickLabelTopItem.setPos(colorBarItem.boundingRect().topRight() + QPointF(10,-20))
+        colorBarTickLabelBottomItem.setPos(colorBarItem.boundingRect().bottomRight() + QPointF(10,-20))
+        colorBarTickLabelTopItem.setScale(2)
+        colorBarTickLabelBottomItem.setScale(2)
+
+        colorBarLabel = QGraphicsTextItem("# of interactions")
+        colorBarLabel.setPos(colorBarItem.boundingRect().bottomRight() + QPointF(20, 100-colorBarItem.boundingRect().height()/2))
+        colorBarLabel.setRotation(270)
+        colorBarLabel.setScale(3)
+
+        self.scene.addItem(colorBarTickItem)
+        self.scene.addItem(colorBarTickLabelTopItem)
+        self.scene.addItem(colorBarTickLabelBottomItem)
+        self.scene.addItem(colorBarLabel)
+
+        for i in range(xAxis+1):
+            xTickPath = QPainterPath()
+            xTickLabel = ""
+            if i%2 == 0:
+                lineBetween = QLineF(xAxisItem.boundingRect().left() + i*self.elementWidth, xAxisItem.boundingRect().bottom(), xAxisItem.boundingRect().left() + i*self.elementWidth, xAxisItem.boundingRect().bottom() + 5)
+                xTickPath.moveTo(lineBetween.pointAt(0))
+                xTickPath.lineTo(lineBetween.pointAt(1))
+                if zoomLevel == 0:
+                    xTickLabel = str(int(xAxisStart + i*zoomFactor))
+                else:
+                    xTickLabel = str(round((xAxisStart + i*zoomFactor),zoomLevel))
+            xTickItem = QGraphicsPathItem(xTickPath)
+            xTickLabelItem = QGraphicsTextItem(xTickLabel)
+            xTickLabelItem.setPos(xTickPath.currentPosition() + QPointF(-15,0))
+            xTickLabelItem.setScale(2)
+            self.scene.addItem(xTickItem)
+            self.scene.addItem(xTickLabelItem)
+
+        for i in range(yAxis+1):
+            yTickPath = QPainterPath()
+            yTickLabel = ""
+            if i%2 == 0:
+                lineBetween = QLineF(yAxisItem.boundingRect().left(), yAxisItem.boundingRect().bottom() - i*self.elementHeight, yAxisItem.boundingRect().left() - 5, yAxisItem.boundingRect().bottom() - i*self.elementHeight)
+                yTickPath.moveTo(lineBetween.pointAt(0))
+                yTickPath.lineTo(lineBetween.pointAt(1))
+                if zoomLevel == 0:
+                    yTickLabel = str(int(yAxisStart + i*zoomFactor))
+                else:
+                    yTickLabel = str(round((yAxisStart + i*zoomFactor),zoomLevel))
+            yTickItem = QGraphicsPathItem(yTickPath)
+            yTickLabelItem = QGraphicsTextItem(yTickLabel)
+            yTickLabelItem.setPos(yTickPath.currentPosition() + QPointF(-50,20))
+            yTickLabelItem.setScale(2)
+            yTickLabelItem.setRotation(270)
+            self.scene.addItem(yTickItem)
+            self.scene.addItem(yTickLabelItem)
+
+        titleLabel = QGraphicsTextItem("Heatmapping chromosome " + chromoA.name + " to " + chromoB.name + " (" + self.variantNames[mapping] + ")")
+        yAxisLabel = QGraphicsTextItem(endString + " on chromosome " + chromoB.name + " (x" + str(int(binSize/1000)) + "kb)")
+        xAxisLabel = QGraphicsTextItem(startString + " on chromosome " + chromoA.name + " (x" + str(int(binSize/1000)) + "kb)")
+
+        titleLabel.setPos(xAxisItemTop.boundingRect().center() + QPointF(-400,-100-yAxisItem.boundingRect().height()/2))
+        yAxisLabel.setPos(yAxisItem.boundingRect().center() + QPointF(-150, 300))
+        xAxisLabel.setPos(xAxisItem.boundingRect().center() + QPointF(-300, 60))
+
+        titleLabel.setScale(4)
+        yAxisLabel.setScale(3)
+        xAxisLabel.setScale(3)
+
+        yAxisLabel.setRotation(270)
+
+        self.scene.addItem(titleLabel)
+        self.scene.addItem(yAxisLabel)
+        self.scene.addItem(xAxisLabel)
+
+
+
+    def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel):
+        zoomFactor = math.pow(zoomFactor, -zoomLevel)
         B=[[0 for j in range(yAxis)] for i in range(xAxis)]
-        if (mapping == "TLOC"): 
+        if (mapping == "TLOC"):
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
@@ -439,7 +388,7 @@ class HeatmapWindow(QWidget):
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
                             if (posConnA >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and posConnA < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and posConnB >= (yAxisStart*binSize + j*binSize*zoomFactor) and posConnB < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                                 counter = counter + 1
-                                #print((xStart*self.binSize + i*(self.binSize/10)), (xStart*self.binSize + i*self.binSize/10 + self.binSize/10), (yStart*self.binSize + j*self.binSize/10), (yStart*self.binSize + j*self.binSize + self.binSize/10))
+                                #print((xAxisStart*binSize + i*(binSize/10)), (xAxisStart*binSize + i*binSize/10 + binSize/10), (yAxisStart*binSize + j*binSize/10), (yAxisStart*binSize + j*self.binSize + binSize/10))
                                 #print(posConnA, posConnB)
                                 #print(i, j)
                                 B[i][j] = counter
@@ -447,9 +396,9 @@ class HeatmapWindow(QWidget):
             for i in range(xAxis):
                 for j in range(yAxis):
                     counter = 0
-                    for variant in self.chromoA.variants:
+                    for variant in chromoA.variants:
                        #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
-                       if (variant[4]==self.mapping):
+                       if (variant[4]==mapping):
                             start = int(variant[1])
                             end = int(variant[3])
                             #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
@@ -457,45 +406,127 @@ class HeatmapWindow(QWidget):
                                 counter = counter + 1
                                 B[i][j] = counter
         B = np.asarray(B)
+        B = B.T
+        #the QT coordinate system has the origin in the top left corner, the y-axis is therefore flipped upside down to get an origin in the bottom left corner.
+        B = np.flipud(B)
+
+
         return B
-    
-    def zoomIn(self):
-        
-        B = self.constructMatrix(self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY))
-        matrixInfo = [self.chromoA, self.chromoB, self.mapping, self.binSize, 0.1, 10, 10, int(self.clickX), int(self.clickY)]
+
+
+    def clearScene(self):
+        self.scene.clear()
+        self.update()
+
+    def wheelEvent(self,event):
+        if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
+            self.scale(0.9,0.9)
+        elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
+            self.scale(1.1,1.1)
+        else:
+            QGraphicsView.wheelEvent(self, event)
+
+
+    #Zoom function
+    #takes the argument zoom, which determines if the zoom should be magnified or not
+    #otherwise creates a new matrix B with the magnified values and adds it to the matrices list
+    def zoomIn(self,zoom, xAxisStart, yAxisStart, xAxis, yAxis):
+        (chromoA, chromoB, mapping, binSize, zoomFactor, b, c, d, e, zoomLevel) = self.matrices[self.activeIndex][1]
+        if zoom:
+            zoomLevel += 1
+        B = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel)
+        matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel]
+        #removing matrices with higher index than self.activeIndex
         if self.activeIndex < len(self.matrices)-1:
-            print("len: " + str(len(self.matrices)))
-            for index in range(0,len(self.matrices)-1):
-                print(index)
+            for index in range(self.activeIndex,len(self.matrices)-1):
                 self.matrices.pop()
+
         self.matrices.append([B, matrixInfo])
         self.activeIndex += 1
+        self.clearScene()
         self.updateHeatmap(self.activeIndex)
-        
-    def setColorBar(self):
-        return 0
-            
-class MplToolbar(NavigationToolbar):
 
-    toolitems = [t for t in NavigationToolbar.toolitems if
-                 t[0] in ("Back", "Forward" )]
-
-    def __init__(self ,*args, **kwargs):
-        super(MplToolbar, self).__init__(*args, **kwargs)
-        self.layout().takeAt(2) 
-        
     def back(self):
-        if self.parentWidget().activeIndex > 0:
-            self.parentWidget().activeIndex -= 1
-            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
-        self.mode = "go back"
-        self.set_message(self.mode)    
-        print(self.parentWidget().activeIndex)
-        
+        if self.activeIndex > 0:
+            self.activeIndex -= 1
+            self.updateHeatmap(self.activeIndex)
+        #print("ActiveIndex: " + str(self.activeIndex))
+
     def forward(self):
-        if self.parentWidget().activeIndex < len(self.parentWidget().matrices)-1:
-            self.parentWidget().activeIndex += 1
-            self.parentWidget().updateHeatmap(self.parentWidget().activeIndex)
-        self.mode = "go forward"
-        self.set_message(self.mode)
-        print(self.parentWidget().activeIndex)
+        if self.activeIndex < len(self.matrices)-1:
+            self.activeIndex += 1
+            self.updateHeatmap(self.activeIndex)
+        #print("ActiveIndex: " + str(self.activeIndex))
+
+    #Creates a selecting rectangle on left click on the graph area
+    def mousePressEvent(self, event):
+        self.origin = event.pos()
+        if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill):
+            if not self.rubberBand.isVisible():
+                self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+            self.rubberBand.setGeometry(QRect(self.origin, QSize()))
+            self.rubberBand.show()
+
+    #Handles the size of the selecting rectangle on mouse movements
+    def mouseMoveEvent(self, event):
+        if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill) and self.mapFromScene(self.graphArea.boundingRect()).containsPoint(event.pos(), Qt.OddEvenFill):
+            if self.rubberBand.isVisible():
+                self.rubberBand.setGeometry(QRect(self.origin,event.pos()).normalized())
+                selectedItems = self.items(self.rubberBand.geometry())
+
+    #When the mouse button is released two things can happen
+    #Either the rectangle has selected more than one elements, then the zoom is started without any magnification, origin will be bottomLeft of the rectangle
+    #and will cover the width and height of the rectangle
+    #OR if the rectangle has only selected one element, then the zoom is started with magnification on the selected indices and cover an area 10x10
+    def mouseReleaseEvent(self, event):
+        if self.mapFromScene(self.graphArea.boundingRect()).containsPoint(self.origin, Qt.OddEvenFill):
+            self.rubberBand.hide()
+            selectedItems = self.items(self.rubberBand.geometry())
+            itemCounter = 0
+            for item in selectedItems:
+                if item.data(0) == "ElementItem":
+                    itemCounter += 1
+            if itemCounter > 1:
+                yIndices = []
+                xIndices = []
+                for item in selectedItems:
+                    if item.data(0) == "ElementItem":
+                        yIndices.append(item.yInd)
+                        xIndices.append(item.xInd)
+                self.zoomIn(False, min(xIndices), min(yIndices), len(list(set(xIndices))), len(list(set(yIndices))))
+            else:
+                selectedItem = self.items(event.pos())
+                for item in selectedItem:
+                    if item.data(0) == "ElementItem":
+                        xInd = item.xInd
+                        yInd = item.yInd
+                self.zoomIn(True, xInd, yInd, 10, 10)
+
+#Subclass of graphics path item for custom handling of mouse events
+class ElementGraphicItem(QGraphicsPathItem):
+
+    def __init__(self,path,xInd, yInd):
+        super().__init__(path)
+        self.selected = False
+        self.xInd = xInd
+        self.yInd = yInd
+        self.setData(0,"ElementItem")
+        #self.setPen(QPen(Qt.darkRed,1))
+
+    #Marks the chromosome item with a blue outline if selected
+    def mark(self):
+        currentPen = self.pen()
+        currentPen.setStyle(Qt.DashLine)
+        currentPen.setBrush(Qt.blue)
+        currentPen.setWidth(3)
+        self.setPen(currentPen)
+        self.selected = True
+
+    def unmark(self):
+        self.setPen(QPen(Qt.darkRed,1))
+        self.selected = False
+
+    #Paints the name of the chromosone in the middle of the item -- possible to implemend changing of font etc if needed
+    #Put this in separate function for more flexible handling of when name is painted?
+    def paint(self,painter,option,widget):
+        super().paint(painter,option,widget)

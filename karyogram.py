@@ -1,17 +1,20 @@
 from PySide.QtCore import *
 from PySide.QtGui import *
 import math
+import common
 
 class KaryogramView(QGraphicsView):
 
-    def __init__(self,dataDict):
+    def __init__(self,dataDict,parent):
         self.type = "karyogram"
         self.scene = QGraphicsScene()
         self.dataDict = dataDict
-        super().__init__(self.scene)
+        super().__init__(self.scene,parent)
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
+        self.stainNames = parent.stainNames
+        self.stainColors = parent.stainColors
         self.numDispChromos = 24
         self.itemsPerRow = 6
         self.cytoGraphicItems = {}
@@ -20,13 +23,8 @@ class KaryogramView(QGraphicsView):
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
-        #create a list of stain names, to be able to set their colors later..
-        self.stainNames = ['acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
-        self.colors = {'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
-        'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
         self.createSettings()
         self.createChInfo()
-        self.showChInfo()
         self.updateItems()
 
     def returnActiveDataset(self):
@@ -52,51 +50,30 @@ class KaryogramView(QGraphicsView):
         self.settingsModel.setItem(0,0,itemsPerRowText)
         self.settingsModel.setItem(0,1,itemsPerRowData)
         self.settingsModel.itemChanged.connect(self.updateSettings)
-        self.colorModel = QStandardItemModel()
-        stainItems = []
-        colorItems = []
-        for stainName in self.stainNames:
-            stainItem = QStandardItem(stainName)
-            stainItem.setEditable(False)
-            stainItem.setSelectable(False)
-            stainItems.append(stainItem)
-            colorItem = QStandardItem()
-            colorItem.setBackground(self.colors[stainName])
-            colorItem.setEditable(False)
-            colorItem.setSelectable(False)
-            colorItems.append(colorItem)
-        self.colorModel.appendColumn(stainItems)
-        self.colorModel.appendColumn(colorItems)
 
-    def updateSettings(self,item):
-        if item.row() == 0:
-            self.itemsPerRow = item.data(0)
+    def updateSettings(self):
+        #Go through every row in the settings model and update accordingly
+        #self.stainColors = self.stainColors
+        self.updateItems()
+        for row in range(self.settingsModel.rowCount()):
+            item = self.settingsModel.item(row,1)
+            if row == 0:
+                self.itemsPerRow = item.data(0)
 
-    def viewSettings(self):
-        self.settingsList = QTableView()
-        self.settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
-        self.settingsList.setShowGrid(False)
-        self.settingsList.horizontalHeader().hide()
-        self.settingsList.verticalHeader().hide()
-        self.settingsList.setModel(self.settingsModel)
-        self.settingsList.setTextElideMode(Qt.ElideNone)
-
-        self.colorList = QTableView()
-        self.colorList.setShowGrid(False)
-        self.colorList.horizontalHeader().hide()
-        self.colorList.verticalHeader().hide()
-        self.colorList.setModel(self.colorModel)
-        self.colorList.doubleClicked.connect(self.pickColor)
-
-        self.settingsDia = QDialog(self)
-        self.settingsDia.setWindowTitle("Settings")
-        applyButton = QPushButton('Apply', self.settingsDia)
-        applyButton.clicked.connect(self.settingsDia.accept)
-        self.settingsDia.layout = QGridLayout(self.settingsDia)
-        self.settingsDia.layout.addWidget(self.settingsList,0,0,1,2)
-        self.settingsDia.layout.addWidget(self.colorList,0,2,1,2)
-        self.settingsDia.layout.addWidget(applyButton,1,0,1,1)
-        self.settingsDia.show()
+    #Creates and returns a widget with this view's settings
+    def returnSettingsWidget(self):
+        settingsWidget = QWidget()
+        settingsLayout = QGridLayout()
+        settingsList = QTableView()
+        settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
+        settingsList.setShowGrid(False)
+        settingsList.horizontalHeader().hide()
+        settingsList.verticalHeader().hide()
+        settingsList.setModel(self.settingsModel)
+        settingsList.setTextElideMode(Qt.ElideNone)
+        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsWidget.setLayout(settingsLayout)
+        return settingsWidget
 
     #Updates display toggles according to this scene's active chModel
     def updateToggles(self):
@@ -181,51 +158,77 @@ class KaryogramView(QGraphicsView):
         self.chDia.setMinimumSize(700,400)
         self.chDia.show()
 
-    #Creates data model for variants in given chromosome
-    def createVariantInfo(self, chromo):
-        self.varModel = QStandardItemModel()
-        topstring = ['TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND']
-        self.varModel.setHorizontalHeaderLabels(topstring)
-        #Adding variant info to a list
-        for variant in chromo.variants:
-            infoitem = []
-            #this is event_type in the variant
-            infoitem.append(QStandardItem(variant[4]))
-            #this is posA in the variant
-            startText = str(variant[1])
-            infoitem.append(QStandardItem(startText))
-            #this is posB or chrB: posB in the variant (if interchromosomal)
-            if variant[0] is not variant[2]:
-                endText = str(variant[2]) + ": " + str(variant[3])
-            else:
-                endText = str(variant[3])
-            infoitem.append(QStandardItem(endText))
-            #this is allGenes in the variant
-            infoitem.append(QStandardItem(variant[7]))
-            #this is cband in the variant
-            infoitem.append(QStandardItem(variant[8]))
-            self.varModel.appendRow(infoitem)
+    def returnChromoInfoWidget(self):
+        self.chList = QTableView()
+        self.chList.verticalHeader().hide()
+        self.chList.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.chList.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.chList.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chList.setShowGrid(False)
+        self.chList.setModel(self.chModel)
+        self.chList.resizeColumnsToContents()
+        #Give the length column some extra space..
+        curWidth = self.chList.columnWidth(1)
+        self.chList.setColumnWidth(1,curWidth+20)
+        #Button for toggling display of selected chromosomes in the scene
+        togButton = QPushButton(QIcon("icons/display.png"),"")
+        togButton.clicked.connect(self.toggleDisp)
+        togButton.setToolTip("Toggle display of chromosome")
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
+        viewVarButton.clicked.connect(self.viewVariants)
+        viewVarButton.setToolTip("View variants in chromosome")
+        #Button for adding variants
+        #addVariantButton = QPushButton(QIcon("icons/new.png"),"")
+        #addVariantButton.clicked.connect(self.addVariant)
+        #addVariantButton.setToolTip("Add custom variant")
+        #Button for toggling connections
+        connButton = QPushButton(QIcon("icons/connections.png"),"")
+        connButton.clicked.connect(self.toggleConnections)
+        connButton.setToolTip("Toggle display of connections between variants")
+        #Button for toggling cyto band names
+        cytoButton = QPushButton(QIcon("icons/display.png"),"")
+        cytoButton.clicked.connect(self.toggleBandNames)
+        cytoButton.setToolTip("Toggle display of band names")
+        chromoInfoLayout = QGridLayout()
+        chromoInfoLayout.addWidget(self.chList,0,0,1,4)
+        chromoInfoLayout.addWidget(togButton,1,0,1,1)
+        chromoInfoLayout.addWidget(connButton,1,1,1,1)
+        chromoInfoLayout.addWidget(viewVarButton,1,2,1,1)
+        #chromoInfoLayout.addWidget(addVariantButton,1,3,1,1)
+        chromoInfoLayout.addWidget(cytoButton,1,3,1,1)
+        chromoWidget = QWidget()
+        chromoWidget.setLayout(chromoInfoLayout)
+        return chromoWidget
 
     #Creates a popup containing variant info in a table.
-    #Could be implemented in a better way than multiple dialogues..
     def viewVariants(self):
+        #Find which chromosome's variants is to be viewed by looking at chList rows
+        selectedIndexes = self.chList.selectedIndexes()
+        selectedRows = [index.row() for index in selectedIndexes]
+        selectedRows = set(selectedRows)
+        #Display a variant window for every selected chromosome
+        for row in selectedRows:
+            chromo = self.chromosomes[row]
+            viewVarDia = common.createVariantDia(chromo,self)
+            #Also connect toggle button in the widget to update scene
+            viewVarDia.layout.itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+            viewVarDia.show()
+
+    def createVariantWidget(self,row):
+        chromo = self.chromosomes[row]
+        varWidget = common.createVariantWidget(chromo)
+        #Also connect toggle button in the widget to update scene
+        varWidget.layout().itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+        return varWidget
+
+    def addVariant(self):
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
         for row in selectedRows:
             chromo = self.chromosomes[row]
-            self.createVariantInfo(chromo)
-            viewVarDia = QDialog(self)
-            viewVarDia.setWindowTitle("Variants in contig " + chromo.name)
-            varList = QTableView()
-            varList.setMinimumSize(500,400)
-            varList.verticalHeader().hide()
-            varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            varList.setModel(self.varModel)
-            varList.resizeColumnToContents(1)
-            viewVarDia.layout = QGridLayout(viewVarDia)
-            viewVarDia.layout.addWidget(varList,0,0)
-            viewVarDia.show()
+            common.addVariant(chromo,self.chromosomes)
 
     def toggleDisp(self):
         #The row associated with the item corresponds to a chromosome
@@ -313,8 +316,8 @@ class KaryogramView(QGraphicsView):
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
                 cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]
                 cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
-                yPosA = cBandAItem.rect().top() + cBandAItem.rect().height() / 2
-                yPosB = cBandBItem.rect().top() + cBandBItem.rect().height() / 2
+                yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
+                yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
                 #If the item has been moved, x and y are how much the item has been moved by; update position with these
                 xPosA += self.cytoGraphicItems[chrA.name].x()
                 xPosB += self.cytoGraphicItems[chrB.name].x()
@@ -333,15 +336,6 @@ class KaryogramView(QGraphicsView):
                 connectionItem.setPen(pen)
                 self.scene.addItem(connectionItem)
                 self.connectionGraphicItems.append(connectionItem)
-
-    def pickColor(self,modelIndex):
-        if modelIndex.column() == 1:
-            selectedRow = modelIndex.row()
-            stainItem = self.colorModel.item(selectedRow,0)
-            colorItem = self.colorModel.item(selectedRow,1)
-            chosenColor = QColorDialog.getColor(colorItem.background().color())
-            self.colors[stainItem.text()] = chosenColor
-            colorItem.setBackground(chosenColor)
 
     #Create chromosome items consisting of cytobands, names of bands, and chromosome names
     def createChromosomeItems(self):
@@ -430,7 +424,7 @@ class KaryogramView(QGraphicsView):
                         else:
                             #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                             bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
-                        bandRectItem.setBrush(self.colors[cyto[4]])
+                        bandRectItem.setBrush(self.stainColors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
                         self.scene.addItem(bandRectItem)
@@ -462,6 +456,7 @@ class KaryogramView(QGraphicsView):
                     longestItemInRow = 0
 
     def updateItems(self):
+        #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user
         for graphicItem in self.cytoGraphicItems.values():
             self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
