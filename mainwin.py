@@ -67,6 +67,8 @@ class SciVisView(QMainWindow):
         #Create a tab widget handling active scenes
         self.sceneTabs = QTabWidget(self)
         self.sceneTabs.currentChanged.connect(self.viewChanged)
+        self.sceneTabs.setTabsClosable(True)
+        self.sceneTabs.tabCloseRequested.connect(self.closeView)
         self.setCentralWidget(self.sceneTabs)
         #Keep a list of views and selected chromosomes for these
         self.views = []
@@ -191,7 +193,7 @@ class SciVisView(QMainWindow):
                 viewPixMap.save(savePath)
 
     #Checks if an active scene is running and if it's ok to continue (closing scene?)
-    def confirmChange(self):
+    def confirmClose(self):
         if self.activeScene:
             newSceneDialog = QDialog()
             newSceneDialog.setWindowTitle("Are you sure?")
@@ -199,7 +201,7 @@ class SciVisView(QMainWindow):
             okButton.clicked.connect(newSceneDialog.accept)
             cancelButton = QPushButton('Cancel', newSceneDialog)
             cancelButton.clicked.connect(newSceneDialog.reject)
-            textLabel = QLabel("The current scene will be lost. Are you sure?")
+            textLabel = QLabel("The scene will be lost. Are you sure?")
             newSceneDialog.layout = QGridLayout(newSceneDialog)
             newSceneDialog.layout.addWidget(textLabel,0,0,1,2)
             newSceneDialog.layout.addWidget(okButton,1,0)
@@ -415,9 +417,19 @@ class SciVisView(QMainWindow):
         else:
             return None
 
-    #Handles toolbar switching etc if the view is changed
+    #Activates when a tab close button has been pressed
+    def closeView(self,viewIndex):
+        if self.confirmClose():
+            view = self.sceneTabs.widget(viewIndex)
+            self.views.remove(view)
+            if not self.views:
+                self.activeScene = False
+                self.removeDockWidget(self.dockWidget)
+                self.initDock()
+            self.sceneTabs.removeTab(viewIndex)
+
+    #Handles toolbar switching etc if the view is changed.
     def viewChanged(self,viewIndex):
-        view = self.sceneTabs.currentWidget()
         #Remove current toolbar and close open windows for last open view
         try:
             self.removeToolBar(self.tools)
@@ -426,6 +438,10 @@ class SciVisView(QMainWindow):
             self.tools.deleteLater()
         except:
             pass
+        #Return false if no new scene has been initialized, true otherwise
+        if not self.activeScene:
+            return False
+        view = self.sceneTabs.currentWidget()
         self.lastActiveView = view
         #Add this view's chromosome info widget
         infoWidget = view.returnChromoInfoWidget()
@@ -541,6 +557,7 @@ class SciVisView(QMainWindow):
             self.tools.addAction(backAct)
             self.tools.addAction(forwardAct)
             self.tools.show()
+        return True
 
     #Creates and initializes a new circular diagram
     def newCirc(self):
