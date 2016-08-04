@@ -20,6 +20,8 @@ class KaryogramView(QGraphicsView):
         self.cytoGraphicItems = {}
         self.cytoGraphicItemPositions = {}
         self.connectionGraphicItems = []
+        self.variantMarkItems = []
+        self.activeChromo = None
         self.setRenderHints(QPainter.Antialiasing)
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.show()
@@ -88,6 +90,7 @@ class KaryogramView(QGraphicsView):
                 self.chromosomes[row].display_connections = True
             else:
                 self.chromosomes[row].display_connections = False
+        
         self.updateItems()
 
     #Creates data model for info window
@@ -200,6 +203,11 @@ class KaryogramView(QGraphicsView):
         chromoWidget = QWidget()
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
+        
+    def setActiveChromosome(self,chromoNumber,varTable):
+        self.varTable = varTable
+        self.activeChromo = self.chromosomes[chromoNumber]
+        self.updateItems()
 
     #Creates a popup containing variant info in a table.
     def viewVariants(self):
@@ -293,6 +301,7 @@ class KaryogramView(QGraphicsView):
                 chrA.createConnections()
             for connection in chrA.connections:
                 #The information is stored as string elements and needs to be converted to integers
+                print(1)
                 if connection[1] == 'X':
                     chrBIndex=22
                     chrB = self.chromosomes[chrBIndex]
@@ -305,7 +314,7 @@ class KaryogramView(QGraphicsView):
                     chrB = self.chromosomes[int(connection[1])-1]
                 if not chrB.display or connection[4] is None:
                     continue
-                    
+                print(2)    
                 #If chrA higher in order than chrB, WINA and WINB are switched, so check this first    
                 if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
                     connEndPos = int(connection[2].split(',')[1])
@@ -326,11 +335,12 @@ class KaryogramView(QGraphicsView):
                 #do not show small variants within one cytoband
                 if cbandA == cbandB:
                     continue
-
+                print(3)
                 #The x-positions are accessed, the chromosome A x-pos has the chromosome width added to it. This will make the connection start on its right side
                 #First check if these cytobands exist, in case of discrepancy in vcf and cytoband files
                 if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
                     continue
+                print(4)
                 if chrA.name == chrB.name:    
                     if placeLeft:
                         xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
@@ -344,13 +354,6 @@ class KaryogramView(QGraphicsView):
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
                 cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]                
                 cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
-                # startKey = ""
-                # for cyto in self.cytoInfo:
-                    # for key in self.cytoGraphicItems[chrA.name].bandItemsDict.keys():
-                        # if int(cyto[1]) > 6900000 and int(cyto[1]) < 10000000 and key == cyto[3] and cyto[0] == chrA.name:
-                            # startKey = key
-                # print(startKey)
-                #print(self.cytoGraphicItems[chrA.name].bandItemsDict[startKey].boundingRect().top())
                 yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
                 yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
                 #If the item has been moved, x and y are how much the item has been moved by; update position with these
@@ -378,42 +381,9 @@ class KaryogramView(QGraphicsView):
                 #pen.setBrush(cBandBItem.brush())
                 pen.setBrush(Qt.darkYellow)
                 connectionItem.setPen(pen)
+                print(connectionItem)
                 self.scene.addItem(connectionItem)
                 self.connectionGraphicItems.append(connectionItem)
-                
-            if not chrA.display:
-                continue
-            startKey = ""
-            for cyto in self.cytoInfo:
-                for key in self.cytoGraphicItems[chrA.name].bandItemsDict.keys():
-                    if cyto[1] == "0" and key == cyto[3] and cyto[0] == chrA.name:
-                        startKey = key
-                        
-            startBand = self.cytoGraphicItems[chrA.name].bandItemsDict[startKey]
-            #print(startBand.data(4))
-            # print(startBand.boundingRect())
-            # print(startKey)
-            # print(chrA.name)
-            xPos = self.cytoGraphicItems[chrA.name].boundingRect().left()
-            yPos = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).top()
-            #print(xPos, yPos)
-            chromoHeight = self.cytoGraphicItems[chrA.name].boundingRect().height()
-            chromoWidth = self.cytoGraphicItems[chrA.name].boundingRect().width()
-            chromoLength = int(chrA.end)
-            for variant in chrA.variants:
-                if not variant[9] or (variant[4] == "BND" and variant[0] is not variant[2]):
-                    continue
-                startPos = variant[1]
-                endPos = variant[3]
-                variantLength = endPos-startPos
-                variantHeight = (variantLength/chromoLength)*chromoHeight
-                markPath = QPainterPath()
-                markPath.addRect(xPos, yPos + (startPos/chromoLength)*chromoHeight, chromoWidth, variantHeight)
-                variantMark = QGraphicsPathItem(markPath)
-                variantMark.setPen(QPen(Qt.red))
-                variantMark.setBrush(QBrush(Qt.red))
-                self.scene.addItem(variantMark)
-        #self.markVariants()
 
     #Create chromosome items consisting of cytobands, names of bands, and chromosome names
     def createChromosomeItems(self):
@@ -449,6 +419,7 @@ class KaryogramView(QGraphicsView):
                 textItems = []
                 placeLeft = True
                 firstAcen = True
+                rounded = ""
                 #Find each cytoband for this chromosome, and create band items using this data
                 for cyto in self.cytoInfo:
                     if cyto[0] == chromo.name:
@@ -467,6 +438,7 @@ class KaryogramView(QGraphicsView):
                             roundPath.arcTo(rect,0,180)
                             roundPath.closeSubpath()
                             bandRectItem = QGraphicsPathItem(roundPath)
+                            rounded = "top"
                         #If first acen, round on bottom
                         elif cyto[4] == 'acen' and firstAcen:
                             rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
@@ -476,6 +448,7 @@ class KaryogramView(QGraphicsView):
                             roundPath.closeSubpath()
                             bandRectItem = QGraphicsPathItem(roundPath)
                             firstAcen = False
+                            rounded = "bottom"
                         #If second acen, round on top
                         elif cyto[4] == 'acen':
                             rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
@@ -484,6 +457,7 @@ class KaryogramView(QGraphicsView):
                             roundPath.arcTo(rect,0,180)
                             roundPath.closeSubpath()
                             bandRectItem = QGraphicsPathItem(roundPath)
+                            rounded = "top"
                         #If last item, round on bottom (i.e. last index in last chr or new chr next on next index)
                         elif self.cytoInfo.index(cyto) == len(self.cytoInfo)-1:
                             rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
@@ -492,6 +466,7 @@ class KaryogramView(QGraphicsView):
                             roundPath.arcTo(rect,0,-180)
                             roundPath.closeSubpath()
                             bandRectItem = QGraphicsPathItem(roundPath)
+                            rounded = "bottom"
                         elif self.cytoInfo[self.cytoInfo.index(cyto)+1][0] != chromo.name:
                             rect = QRectF(bandXPos,bandYPos,bandWidth,bandHeight)
                             rect.setTop(rect.top() - rect.height())
@@ -499,15 +474,18 @@ class KaryogramView(QGraphicsView):
                             roundPath.arcTo(rect,0,-180)
                             roundPath.closeSubpath()
                             bandRectItem = QGraphicsPathItem(roundPath)
+                            rounded = "bottom"
                         else:
                             #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                             bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
+                            rounded = "none"
                         bandRectItem.setBrush(self.stainColors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
                         bandRectItem.setData(2, cytoStart)
                         bandRectItem.setData(3, cytoEnd)
                         bandRectItem.setData(4, bandYPos)
+                        bandRectItem.setData(5, rounded)
                         self.scene.addItem(bandRectItem)
                         bandItems.append(bandRectItem)
                         if chromo.display_cytoBandNames:
@@ -537,45 +515,36 @@ class KaryogramView(QGraphicsView):
                     longestItemInRow = 0
 
     def markVariants(self):
-        
-        for chrA in self.chromosomes:
-            if not chrA.display:
-                continue
-            startKey = ""
-            for cyto in self.cytoInfo:
-                for key in self.cytoGraphicItems[chrA.name].bandItemsDict.keys():
-                    #print(chrA.name + " " + self.cytoGraphicItems[chrA.name] +self.cytoGraphicItems[chrA.name].bandItemsDict[key].boundingRect().top())
-                    if cyto[1] == "0" and key == cyto[3] and cyto[0] == chrA.name:
-                        startKey = key
-             
-            #print(self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect())) 
-            #print(self.cytoGraphicItems[chrA.name].boundingRect())
-             
-            startBand = self.cytoGraphicItems[chrA.name].bandItemsDict[startKey]
-            #print(startBand.boundingRect())
-            xPos = self.cytoGraphicItems[chrA.name].boundingRect().left()
+        self.variantMarkItems = []
+        if self.activeChromo and self.varTable:
+            chrA = self.activeChromo
+            variants = common.returnVariants(chrA,self.varTable)
+            chromoHeight = 0
+            xPos = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
             yPos = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).top()
-            print(chrA.name, yPos)
-            chromoHeight = self.cytoGraphicItems[chrA.name].boundingRect().height()
-            chromoWidth = self.cytoGraphicItems[chrA.name].boundingRect().width()
+            for band in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
+                chromoHeight += band.mapRectToScene(band.boundingRect()).height()
+            chromoWidth = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).width()
             chromoLength = int(chrA.end)
-            for variant in chrA.variants:
+            for variant in variants:
                 if not variant[9] or (variant[4] == "BND" and variant[0] is not variant[2]):
                     continue
                 startPos = variant[1]
                 endPos = variant[3]
                 variantLength = endPos-startPos
                 variantHeight = (variantLength/chromoLength)*chromoHeight
-                markPath = QPainterPath()
-                markPath.addRect(xPos, yPos + (startPos/chromoLength)*chromoHeight, chromoWidth, variantHeight)
-                variantMark = QGraphicsPathItem(markPath)
-                variantMark.setPen(QPen(Qt.red))
-                variantMark.setBrush(QBrush(Qt.red))
-                self.scene.addItem(variantMark)
-                
-            
-            
-                    
+                markRect = QRect(xPos, yPos + (startPos/chromoLength)*chromoHeight, chromoWidth, variantHeight)
+                markRectItem = QGraphicsRectItem(markRect)
+                if variant[4] == "DEL":
+                    markRectItem.setBrush(QBrush(Qt.red))
+                elif variant[4] == "DUP":
+                    markRectItem.setBrush(QBrush(Qt.green))
+                else:   
+                    markRectItem.setBrush(QBrush(Qt.blue))
+                markRectItem.setOpacity(0.5)
+                self.scene.addItem(markRectItem)
+                self.variantMarkItems.append(markRectItem)
+          
     def updateItems(self):
         #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user
@@ -590,13 +559,18 @@ class KaryogramView(QGraphicsView):
                 self.scene.removeItem(connItem)
             except:
                 pass
+        for markItem in self.variantMarkItems:
+            try:
+                self.scene.removeItem(markItem)
+            except:
+                pass
         self.createChromosomeItems()
         #Move back the items to their old positions
         for graphicItem in self.cytoGraphicItems.values():
             if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
                 graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
         self.drawConnections()
-        
+        self.markVariants()
         self.update()
 
     #Rearranges the graphic items to their default position

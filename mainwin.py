@@ -672,3 +672,8 @@ class SciVisView(QMainWindow):
             self.dockWidget.updateGeometry()
             if view.type == 'coverage':
                 view.setActiveChromosome(selectedRow)
+            if view.type == 'karyogram':
+                varTable = varWidget.layout().itemAtPosition(1,0).widget()
+                selModel = varTable.selectionModel()
+                selModel.selectionChanged.connect(view.updateItems)
+                view.setActiveChromosome(selectedRow,varTable)
