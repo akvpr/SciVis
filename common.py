@@ -71,6 +71,18 @@ def createVariantInfo(chromo):
         infoitem.append(QStandardItem(variant[10]))
         varModel.appendRow(infoitem)
     return varModel
+    
+    #Toggles individual variants on and off
+def returnVariants(chromo, varView):
+    selectedProxyIndexes = varView.selectedIndexes()
+    #Selected indexes are indexes in proxy model, so translate to source indexes
+    selectedIndexes = [varView.model().mapToSource(proxyIndex) for proxyIndex in selectedProxyIndexes]
+    selectedRows = [index.row() for index in selectedIndexes]
+    selectedRows = set(selectedRows)
+    selectedVariants = []
+    for row in selectedRows:
+        selectedVariants.append(chromo.variants[row])
+    return selectedVariants
 
 #Creates and returns a popup containing variant info in a table.
 def createVariantDia(chromo,parent):

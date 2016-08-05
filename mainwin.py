@@ -529,7 +529,7 @@ class SciVisView(QMainWindow):
             chromoBBox.currentIndexChanged.connect(view.changeChromoB)
             binSizeBox = QLineEdit()
             binSizeBox.setValidator(QIntValidator(2000,20000, self))
-            binSizeBox.insert("5000")
+            binSizeBox.insert("10000")
             binSizeBox.editingFinished.connect(lambda: view.changeBinsize(binSizeBox.text()))
             variantTypeBox = QComboBox()
             mappingStrings = ["Deletion", "Translocation", "Duplication", "Interspersed duplication", "Tandem duplication", "Inversion", "Insertion", "Break end"]
@@ -735,8 +735,14 @@ class SciVisView(QMainWindow):
                 selModel = varTable.selectionModel()
                 selModel.selectionChanged.connect(view.updatePlot)
                 view.setActiveChromosome(selectedRow,varTable)
+            if view.type == 'karyogram':
+                varTable = varWidget.layout().itemAtPosition(1,0).widget()
+                selModel = varTable.selectionModel()
+                selModel.selectionChanged.connect(view.updateItems) 
+                view.setActiveChromosome(selectedRow,varTable)
             if view.type == 'circ':
                 varTable = varWidget.layout().itemAtPosition(1,0).widget()
                 selModel = varTable.selectionModel()
                 selModel.selectionChanged.connect(view.initscene)
                 view.setActiveChromosome(selectedRow,varTable)
+                

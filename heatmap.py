@@ -24,7 +24,7 @@ class HeatmapView(QGraphicsView):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.hide()
         self.origin = QPoint(0,0)
-        self.binSize = 5000
+        self.binSize = 10000
         self.chromoA = self.chromosomes[0]
         self.chromoB = self.chromosomes[0]
         self.mapping = "DEL"
@@ -35,6 +35,7 @@ class HeatmapView(QGraphicsView):
         self.show()
         self.clearScene()
         self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
+        self.scale(0.7, 0.7)
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -194,6 +195,7 @@ class HeatmapView(QGraphicsView):
     def createVariantWidget(self,row):
         chromo = self.chromosomes[row]
         varWidget = common.createVariantWidget(chromo)
+        varWidget.layout().itemAtPosition(2,0).widget().clicked.connect(lambda: self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping))
         return varWidget
 
     def addVariant(self):
@@ -205,18 +207,15 @@ class HeatmapView(QGraphicsView):
             common.addVariant(chromo,self.chromosomes)
 
     def createHeatmap(self, chromoA, chromoB, binSize, mapping):
+        self.clearScene()
         self.variantNames = {"BND":"Break end", "DEL":"Deletion", "DUP":"Duplication", "IDUP":"Interspersed duplication", "INS":"Insertion", "INV":"Inversion", "TDUP":"Tandem duplication", "TLOC":"Translocation"}
         binSize = binSize*1000
         self.matrices = []
         self.activeIndex = 0
         zoomLevel = 0
         zoomFactor = 10
-        xAxis = int(round(int(chromoA.end)/binSize,0))
-        yAxis = int(round(int(chromoB.end)/binSize,0))
-
-        if not chromoA.connections:
-            chromoA.createConnections()
-
+        xAxis = int(int(chromoA.end)/binSize)+1
+        yAxis = int(int(chromoB.end)/binSize)+1
         A = self.constructMatrix(chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel)
         matrixInfo = [chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, 0, 0, zoomLevel]
         self.matrices.append([A, matrixInfo])
@@ -261,6 +260,7 @@ class HeatmapView(QGraphicsView):
         self.elementWidth = xAxisItem.boundingRect().width()/xAxis
         self.elementHeight = yAxisItem.boundingRect().height()/yAxis
 
+        #draw the actual heatmap
         #since the y-axis is flipped, y values has an offset of yAxis - yInd - 1
         for xInd in range(xAxis):
             for yInd in range(yAxis):
@@ -268,10 +268,12 @@ class HeatmapView(QGraphicsView):
                 elementPath.addRect(xInd*self.elementWidth + xAxisItem.boundingRect().left(), yInd*self.elementHeight + yAxisItem.boundingRect().top(), self.elementWidth, self.elementHeight)
                 elementItem = ElementGraphicItem(elementPath, xAxisStart + xInd*zoomFactor, yAxisStart + (yAxis - yInd - 1)*zoomFactor)
                 elementItem.setToolTip("x: " + str((xAxisStart + xInd*zoomFactor)*binSize*1000) + "bp\n" + "y: " + str((yAxisStart + (yAxis - yInd - 1)*zoomFactor)*binSize*1000) + "bp\n" + "#interactions: " +  str(A[yInd][xInd]))
-                #Color each element depending on how many "hits" they have, more hits -> lighter color
+                #Color each element depending on how many "hits" or interactions they have, more hits -> lighter color
                 color = self.color.lighter(105*(1+(A[yInd][xInd])/(np.amax(A)+1)))
                 colorPen = QPen(QBrush(self.color),1)
+                #color the edges
                 elementItem.setPen(colorPen)
+                #fill the rectangles
                 elementItem.setBrush(QBrush(color))
                 self.scene.addItem(elementItem)
 
@@ -286,6 +288,7 @@ class HeatmapView(QGraphicsView):
         colorBarItem.setBrush(QBrush(linearGradient))
         self.scene.addItem(colorBarItem)
 
+        #Add colorbar ticks and labels
         colorBarTick = QPainterPath()
         lineBetween = QLineF(colorBarItem.boundingRect().bottomRight(), colorBarItem.boundingRect().bottomRight() + QPointF(5,0))
         colorBarTick.moveTo(lineBetween.pointAt(1))
@@ -311,6 +314,7 @@ class HeatmapView(QGraphicsView):
         self.scene.addItem(colorBarTickLabelBottomItem)
         self.scene.addItem(colorBarLabel)
 
+        #Create axes ticks and labels (xAxis)
         for i in range(xAxis+1):
             xTickPath = QPainterPath()
             xTickLabel = ""
@@ -329,6 +333,7 @@ class HeatmapView(QGraphicsView):
             self.scene.addItem(xTickItem)
             self.scene.addItem(xTickLabelItem)
 
+        #yAxis
         for i in range(yAxis+1):
             yTickPath = QPainterPath()
             yTickLabel = ""
@@ -366,45 +371,39 @@ class HeatmapView(QGraphicsView):
         self.scene.addItem(yAxisLabel)
         self.scene.addItem(xAxisLabel)
 
-
-
     def constructMatrix(self, chromoA, chromoB, mapping, binSize, zoomFactor, xAxis, yAxis, xAxisStart, yAxisStart, zoomLevel):
         zoomFactor = math.pow(zoomFactor, -zoomLevel)
         B=[[0 for j in range(yAxis)] for i in range(xAxis)]
-        if (mapping == "TLOC"):
-            for i in range(xAxis):
-                for j in range(yAxis):
-                    counter = 0
-                    for connection in chromoA.connections:
-                        #Only look at connections made to chromosome B
-                        if (connection[1] == chromoB.name):
-                            #takes the position in the middle of each window
-                            startWinA = int(connection[2].split(',')[0])
-                            endWinA = int(connection[2].split(',')[1])
-                            startWinB = int(connection[3].split(',')[0])
-                            endWinB = int(connection[3].split(',')[1])
-                            posConnA = (endWinA + startWinA)/2
-                            posConnB = (endWinB + startWinB)/2
-                            #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (posConnA >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and posConnA < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and posConnB >= (yAxisStart*binSize + j*binSize*zoomFactor) and posConnB < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
-                                counter = counter + 1
-                                #print((xAxisStart*binSize + i*(binSize/10)), (xAxisStart*binSize + i*binSize/10 + binSize/10), (yAxisStart*binSize + j*binSize/10), (yAxisStart*binSize + j*self.binSize + binSize/10))
-                                #print(posConnA, posConnB)
-                                #print(i, j)
-                                B[i][j] = counter
-        else:
-            for i in range(xAxis):
-                for j in range(yAxis):
-                    counter = 0
-                    for variant in chromoA.variants:
-                       #Only look at the specified mapping variant (DEL, TDUP, IDUP, INV, DUP)
-                       if (variant[4]==mapping):
-                            start = int(variant[1])
-                            end = int(variant[3])
-                            #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
-                            if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
-                                counter = counter + 1
-                                B[i][j] = counter
+        for i in range(xAxis):
+            for j in range(yAxis):
+                counter = 0
+                for variant in chromoA.variants:    
+                    #special case if the mapping is a translocation
+                    if mapping == "TLOC" and variant[9] and variant[0] is not variant[2] and variant[2] == chromoB.name:
+                        #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
+                        if self.chromosomes.index(chromoA) > self.chromosomes.index(chromoB):
+                            startWinA = int(variant[5]["WINB"].split(',')[0])
+                            endWinA = int(variant[5]["WINB"].split(',')[1])
+                            startWinB = int(variant[5]["WINA"].split(',')[0])
+                            endWinB = int(variant[5]["WINA"].split(',')[1])
+                        else: 
+                            startWinA = int(variant[5]["WINA"].split(',')[0])
+                            endWinA = int(variant[5]["WINA"].split(',')[1])
+                            startWinB = int(variant[5]["WINB"].split(',')[0])
+                            endWinB = int(variant[5]["WINB"].split(',')[1])
+                        start = (startWinA + endWinA)/2
+                        end = (startWinB + endWinB)/2
+                        if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
+                            counter = counter + 1
+                            B[i][j] = counter
+                            
+                    elif (variant[4]==mapping and variant[9]):
+                        start = int(variant[1])
+                        end = int(variant[3])
+                        #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one
+                        if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
+                            counter = counter + 1
+                            B[i][j] = counter
         B = np.asarray(B)
         B = B.T
         #the QT coordinate system has the origin in the top left corner, the y-axis is therefore flipped upside down to get an origin in the bottom left corner.
@@ -419,6 +418,7 @@ class HeatmapView(QGraphicsView):
         self.update()
 
     def wheelEvent(self,event):
+    
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)
         elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
