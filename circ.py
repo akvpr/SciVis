@@ -3,6 +3,7 @@ import random
 import math
 import data
 import common
+import copy
 from PySide.QtCore import *
 from PySide.QtGui import *
 
@@ -38,17 +39,21 @@ class CircView(QGraphicsView):
         self.coverageNorm = self.dataDict['coverageNorm']
         self.tabName = self.dataDict['tabName']
         self.vcfName = self.dataDict['vcfName']
-        self.addFileText()
         self.createChInfo()
 
+        self.activeChromo = None
+        self.varTable = None
         self.chromosome_angle_list = {}
+        #Initialize a dict with an empty list for each chromosome, to contain bed tracks
+        self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
         #Create a dict representing colors for the chromosomes
         self.chromoColors = {}
         color = self.startColor
         for chromo in self.chromosomes:
             self.chromoColors[chromo.name] = color
             color = color.darker(105)
-        self.initscene()
+        #A list containing rectangles for extra layers, starting empty
+        self.addedLayers = []
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -405,6 +410,9 @@ class CircView(QGraphicsView):
         self.innerChrRect = QRect(QPoint(100,100),QPoint(size.height()-100,size.height()-100))
         self.outerCoverageRect = QRect(QPoint(125,125),QPoint(size.height()-125,size.height()-125))
         self.innerCoverageRect = QRect(QPoint(180,180),QPoint(size.height()-180,size.height()-180))
+        #If no added layers are added, the outermost rectangle is outerChrRect
+        if not self.addedLayers:
+            self.outermostRect = self.outerChrRect
 
     #Method for defining or reinitializing the chromosome items.
     def makeItems(self):
@@ -684,12 +692,18 @@ class CircView(QGraphicsView):
                 distItem = QGraphicsPathItem(outerPath)
                 self.scene.addItem(distItem)
 
+            diaAdjust = (math.sqrt(2) * self.outermostRect.width() - self.outermostRect.width()) / 8
+            startPos = QPointF(self.outermostRect.bottomRight()) - QPointF(diaAdjust,diaAdjust)
             for incr in range(11):
+                adjustPoint1 = QPointF(incr*10,10)
+                adjustPoint2 = QPointF(incr*10,-10)
+                adjustPoint3 = QPointF(incr*10,5)
+                adjustPoint4 = QPointF(incr*10,-5)
                 if incr%10 == 0:
-                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height(), outRect.width()+incr*10, outRect.height()-20)
+                    lineBetween = QLineF(startPos + adjustPoint1, startPos + adjustPoint2)
                     legendNameItem = QGraphicsTextItem(str(incr))
                 else:
-                    lineBetween = QLineF(outRect.width()+incr*10,outRect.height()-5, outRect.width()+incr*10, outRect.height()-15)
+                    lineBetween = QLineF(startPos + adjustPoint3, startPos + adjustPoint4)
                     legendNameItem = QGraphicsTextItem("")
                 legendPath = QPainterPath()
                 legendPath.moveTo(lineBetween.pointAt(0))
@@ -699,7 +713,7 @@ class CircView(QGraphicsView):
                 self.scene.addItem(legendItem)
                 self.scene.addItem(legendNameItem)
 
-            lineBetween = QLineF(outRect.width(),outRect.height()-10, outRect.width()+100, outRect.height()-10)
+            lineBetween = QLineF(startPos, startPos + QPointF(100,0))
             legendTitleItem = QGraphicsTextItem("x" + str(self.bpDistanceResolution) + " Mb")
             legendPath = QPainterPath()
             legendPath.moveTo(lineBetween.pointAt(0))
@@ -799,23 +813,162 @@ class CircView(QGraphicsView):
         self.makeItems()
         self.createCoverage()
         self.drawConnections()
+        self.addLayers()
         self.createDistanceMarkers()
+        self.addFileText()
         for connList in self.connectionItems.values():
             for connItem in connList:
                 self.scene.addItem(connItem[0])
         if self.showCentromereRegion:
             self.colorCentromeres()
+        #Exception when changing between views and variant table is old; needs to be fixed
+        #Should save the view's active chromosome and select this again on view change (in mainwin)
+        try:
+            self.highlightVariants()
+        except:
+            pass
         self.update()
 
     #Adds the VCF and TAB file names as text items to the top of the scene
     def addFileText(self):
-        tabText = self.scene.addText("TAB File: " + self.tabName)
+        tabText = self.scene.addText("TAB File: " + self.tabName.split('/')[-1])
         tabText.setFlag(QGraphicsItem.ItemIsMovable)
         tabText.setTextInteractionFlags(Qt.TextEditorInteraction)
-        vcfText = self.scene.addText("VCF File: " + self.vcfName)
-        vcfText.setPos(0,0+tabText.boundingRect().height())
+        tabText.setPos(self.outermostRect.topLeft())
+        tabText.setX(tabText.pos().x() - tabText.boundingRect().width() - 100)
+        tabText.setX(tabText.pos().y() - tabText.boundingRect().height() - 100)
+        vcfText = self.scene.addText("VCF File: " + self.vcfName.split('/')[-1])
+        vcfText.setPos(tabText.pos())
+        vcfText.setY(vcfText.pos().y()-tabText.boundingRect().height())
         vcfText.setFlag(QGraphicsItem.ItemIsMovable)
         vcfText.setTextInteractionFlags(Qt.TextEditorInteraction)
+
+    def setActiveChromosome(self,chromoNumber,varTable):
+        self.varTable = varTable
+        self.activeChromo = self.chromosomes[chromoNumber]
+        self.initscene()
+
+    def highlightVariants(self):
+        if self.activeChromo and self.varTable:
+            chrA = self.activeChromo
+            variants = common.returnVariants(chrA,self.varTable)
+            for variant in variants:
+                if not (chrA.display):
+                    continue
+                chrB = self.chromosomeDict[variant[2]]
+                if chrB.name.startswith('G') or chrB.name == 'MT':
+                    continue
+                if not chrB.display:
+                    continue
+                #The curAngle determines where on the circle the chromosome is located (also used in makeItems)
+                curAngle_A = self.chromosome_angle_list[chrA.name][0]
+                curAngle_B = self.chromosome_angle_list[chrB.name][0]
+                #The windows of each variant (WINA, WINB) are used to determine where on the chromosome the interaction is located
+                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
+                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                    bp_End_A = int(variant[3])
+                    chrA_length = int(chrA.end)
+                    bp_End_B = int(variant[1])
+                    chrB_length = int(chrB.end)
+                else:
+                    bp_End_A = int(variant[1])
+                    chrA_length = int(chrA.end)
+                    bp_End_B = int(variant[3])
+                    chrB_length = int(chrB.end)
+                #A percentage of the total angle (used to draw the chromosome in makeItems) determines where on the
+                #chromosome the connection is located
+                angleIncr_A = (1-((chrA_length - bp_End_A) / chrA_length)) * (self.chromosome_angle_list[chrA.name][1]-2)
+                angleIncr_B = (1-((chrB_length - bp_End_B) / chrB_length)) * (self.chromosome_angle_list[chrB.name][1]-2)
+                #A Path is created to assign the position for the connections
+                tempPath = QPainterPath()
+                #The arMoveTo() function is used to get the different points on each chromosome the connection is located
+                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_A + angleIncr_A))
+                posA = tempPath.currentPosition()
+                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_B + angleIncr_B))
+                posB = tempPath.currentPosition()
+                centerPos = self.outerChrRect.center()
+                #A Bezier curve is then created between these three points
+                connectionPath = QPainterPath()
+                connectionPath.moveTo(posA)
+                connectionPath.quadTo(centerPos,posB)
+                #The path is converted to a graphics path item
+                connectionItem = QGraphicsPathItem(connectionPath)
+                #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
+                pen = QPen(Qt.red, self.connWidth)
+                pen.setStyle(Qt.DashLine)
+                connectionItem.setPen(pen)
+                connectionItem.setZValue(2)
+                connectionItem.setOpacity(0.6)
+                self.scene.addItem(connectionItem)
+
+    #Iterates through lists of regions for each chr formatted as identifier,start,end,text ..  and adds a circle layer with these regions
+    def addLayers(self):
+        for chromo in self.chromosomes:
+            if not chromo.display:
+                continue
+            layerIndex = 0
+            for regionList in self.bedDict[chromo.name]:
+                layerRects = self.addedLayers[layerIndex]
+                layerRects[0].moveCenter(self.innerCoverageRect.center())
+                layerRects[1].moveCenter(self.innerCoverageRect.center())
+                for region in regionList:
+                    #where on the circle does this chromosome start, how much does it span?
+                    startAngle = self.chromosome_angle_list[chromo.name][0]
+                    angleSpan = self.chromosome_angle_list[chromo.name][1]
+                    #the region starts and ends at certain points in this span
+                    regionStart = int(region[1])
+                    regionEnd = int(region[2])
+                    #if the files are slightly misaligned, set maximum end to chromo end
+                    if regionEnd > int(chromo.end):
+                        regionEnd = int(chromo.end)
+                    regionStartAngle = startAngle + (regionStart/int(chromo.end))*angleSpan
+                    regionEndAngle = startAngle + (regionEnd/int(chromo.end))*angleSpan
+                    #Only construct an item if the span is larger than one degree
+                    if regionEndAngle - regionStartAngle < 0.1:
+                        continue
+                    #Define two painter paths constructing circle sectors
+                    outer = QPainterPath()
+                    inner = QPainterPath()
+                    outer.moveTo(layerRects[1].center())
+                    outer.arcTo(layerRects[1],-regionStartAngle, -(regionEndAngle-regionStartAngle))
+                    inner.moveTo(layerRects[0].center())
+                    inner.arcTo(layerRects[0],-regionStartAngle, -(regionEndAngle-regionStartAngle))
+                    #Removes any leftover painting path that may cause ugly lines in the middle
+                    leftoverArea = QPainterPath()
+                    leftoverArea.moveTo(layerRects[0].center())
+                    leftoverArea.arcTo(layerRects[0],0,360)
+                    #Remove the inner circle sector from the outer sector to get the area to display
+                    regionPath = outer.subtracted(inner)
+                    regionPath = regionPath.subtracted(leftoverArea)
+                    regionItem = BedRegionItem(regionPath,region)
+                    regionItem.setBrush(self.chromoColors[chromo.name])
+                    self.scene.addItem(regionItem)
+                layerIndex += 1
+
+    def addLayerRect(self):
+        newRectInner = copy.copy(self.outermostRect)
+        newRectOuter = copy.copy(self.outermostRect)
+        offset1 = QPoint(50,50)
+        offset2 = QPoint(20,20)
+        newRectInner.setTopLeft(self.outermostRect.topLeft()-offset1)
+        newRectInner.setBottomRight(self.outermostRect.bottomRight()+offset1)
+        newRectOuter.setTopLeft(newRectInner.topLeft()-offset2)
+        newRectOuter.setBottomRight(newRectInner.bottomRight()+offset2)
+        self.addedLayers.append([newRectInner,newRectOuter])
+        self.outermostRect = newRectOuter
+
+    #Reads a bed file and adds a list of bed (or any similarly structured file) elements for each chromosome
+    def addNewLayer(self):
+        newBedDict = common.createBedDict()
+        #Insert the list with new layer regions for each chromosome
+        for key in self.chromosomeDict.keys():
+            if key in newBedDict.keys():
+                self.bedDict[key].append(newBedDict[key])
+            else:
+                #If no match in newly created list, insert empty region list for this chromosome
+                self.bedDict[key].append([])
+        self.addLayerRect()
+        self.initscene()
 
     def wheelEvent(self,event):
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
@@ -825,6 +978,38 @@ class CircView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
+#Bed graphic item with some convenience functions for marking etc
+class BedRegionItem(QGraphicsPathItem):
+
+    def __init__(self,path,bedFields):
+        super().__init__(path)
+        self.bedText = bedFields[3]
+        self.setToolTip(self.bedText)
+        self.marked = False
+        self.setData(0,"bedItem")
+
+    def toggleMarked(self):
+        if not self.marked:
+            pen = self.pen()
+            pen.setStyle(Qt.DashLine)
+            pen.setBrush(Qt.red)
+        else:
+            pen = QPen()
+        self.setPen(pen)
+        self.marked = not self.marked
+
+    def setMarked(self):
+        pen = self.pen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+        self.marked = True
+
+    def setUnmarked(self):
+        pen = QPen()
+        self.setPen(pen)
+        self.marked = False
+
 #Subclass of graphics path item for custom handling of mouse events
 class ChromoGraphicItem(QGraphicsPathItem):
 
@@ -832,7 +1017,7 @@ class ChromoGraphicItem(QGraphicsPathItem):
         super().__init__(path)
         self.selected = False
         self.nameString = nameString
-        self.setData(0,"ChromoItem")
+        self.setData(0,"chromoItem")
         self.setPen(QPen(Qt.black,1))
 
     #Marks the chromosome item with a blue outline if selected
@@ -870,13 +1055,21 @@ class CircScene(QGraphicsScene):
                 continue
             #Items with custom selection behavior have custom data
             #These should have their own handling; other items go through the default implementation
-            if (item.data(0) == "ChromoItem"):
+            if item.data(0) == "chromoItem":
                 if item.selected:
                     item.unmark()
                     self.markedChromItems.remove(item)
                 else:
                     item.mark()
                     self.markedChromItems.append(item)
+            if item.data(0) == 'bedItem':
+                item.toggleMarked()
+                menu = QMenu()
+                linkAct = QAction("OMIM search: " + item.bedText, self)
+                linkAct.triggered.connect(lambda: self.openLink(item.bedText))
+                menu.addAction(linkAct)
+                menu.exec_(QCursor.pos())
+                item.toggleMarked()
             else:
                 QGraphicsScene.mousePressEvent(self,event)
 
@@ -965,3 +1158,9 @@ class CircScene(QGraphicsScene):
             labelItem = self.createItemGroup([rectItem,textItem])
             labelItem.setFlag(QGraphicsItem.ItemIsMovable)
             labelItem.setPos(self.lastContextPos)
+
+    #Primitive function to search for bed item name in OMIM database
+    #Currently opens a browser and simply searches for the term, but could use omim REST-api?
+    def openLink(self,linkText):
+        linkUrl = QUrl("https://www.ncbi.nlm.nih.gov/omim/?term=" + linkText)
+        QDesktopServices.openUrl(linkUrl)

@@ -40,8 +40,10 @@ class CoverageView(QWidget):
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
         self.createChInfo()
-        #Initialize a dict with an empty list for each chromosome
+        #Initialize a dict with an empty list for each chromosome, to contain bed tracks
         self.bedDict = {chromo.name: [] for chromo in self.chromosomes}
+        #Initialize an excluded region dict
+        self.excludeDict = {chromo.name: [] for chromo in self.chromosomes}
         self.mainView.setRenderHints(QPainter.Antialiasing)
         self.overviewView.setRenderHints(QPainter.Antialiasing)
         self.splitter.addWidget(self.mainView)
@@ -373,16 +375,18 @@ class CoverageView(QWidget):
             self.mainScene.addItem(yTickLabelItem)
 
         #Create x ticks to show chromosome position
-        bpIncrement = float(chromo.end)/10
-        for i in range(1,10):
+        bpIncrement = limits[1] / 10
+        bpStart = limits[0]
+        for i in range(0,10):
             point = QPointF(self.graphArea.left() + (i)*xAxisIncrement, self.graphArea.bottom())
             line = QLineF()
             line.setP1(point)
             line.setP2(point + QPointF(0,15))
             lineItem = QGraphicsLineItem(line)
             self.mainScene.addItem(lineItem)
-            bpPosition = i*bpIncrement
-            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition)))
+            bpPosition = bpStart + i*bpIncrement
+            #Show the position in kbp
+            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition/1000)))
             xTickLabelItem.setPos(point +  QPointF(0, 0))
             self.mainScene.addItem(xTickLabelItem)
 
@@ -399,6 +403,10 @@ class CoverageView(QWidget):
                     pointItem.setBrush(QBrush(Qt.green))
                 else:
                     pointItem.setBrush(QBrush(Qt.black))
+                #Set data with key 0 as 'plotItem' for convenience
+                pointItem.setData(0,'plotItem')
+                pointBp = round((pointRect.center().x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                pointItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
                 self.mainScene.addItem(pointItem)
 
         elif ptype == 1:
@@ -425,6 +433,9 @@ class CoverageView(QWidget):
                 line = QLineF(startPoint, endPoint)
                 lineItem = QGraphicsLineItem(line)
                 lineItem.setPen(colorPen)
+                lineItem.setData(0,'plotItem')
+                pointBp = round((startPoint.x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                lineItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
                 self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
@@ -442,12 +453,21 @@ class CoverageView(QWidget):
         #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
         self.overviewScene.addItem(self.selectorItem)
+        bedSceneRect = self.bedScene.sceneRect()
+        self.trackViewArea.setHeight(bedSceneRect.height()+20)
         self.bedView.setSceneRect(self.trackViewArea)
         self.overviewView.setSceneRect(self.overviewArea)
         self.mainView.setSceneRect(self.fitArea)
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
+        self.excludeRegions()
+        #Exception when changing between views and variant table is old; needs to be fixed
+        #Should save the view's active chromosome and select this again on view change (in mainwin)
+        try:
+            self.markVariants()
+        except:
+            pass
         self.update()
 
     def defineRectangles(self):
@@ -478,13 +498,14 @@ class CoverageView(QWidget):
         limits = [regionStart, regionLength]
         self.limits = limits
 
-    def setActiveChromosome(self,chromoNumber):
+    def setActiveChromosome(self,chromoNumber,varTable):
         #Before switching, save current marker for this chr
         self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
         self.activeChromo = chromoNumber
         self.limits = [0,int(self.chromosomes[self.activeChromo].end)]
         mRect = self.chromoSelectorRects[self.chromosomes[self.activeChromo].name]
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+        self.varTable = varTable
         self.updateLimits()
         self.updatePlot()
 
@@ -500,44 +521,111 @@ class CoverageView(QWidget):
         maxLength = self.trackArea.width()
         viewedBp = self.limits[1]
         for bedLines in self.bedDict[chromo.name]:
+            #Uses the first letter of the bed file as track name. Better names might exist.
+            trackName = bedLines[0][0]
+            trackName = trackName[0]
+            trackNameItem = QGraphicsTextItem(trackName)
+            font = QFont()
+            font.setPointSize(12)
+            trackNameItem.setFont(font)
+            self.bedScene.addItem(trackNameItem)
+            trackNameItem.setPos(QPointF(self.trackArea.left()-20,itemY))
             for line in bedLines:
                 if int(line[1]) >= self.limits[0] and int(line[2]) <= self.limits[1]+self.limits[0]:
                     itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
                     itemWidth = (int(line[2])-int(line[1])) / (viewedBp) * maxLength
                     rect = QRectF(itemStart,itemY,itemWidth,itemHeight)
-                    #Only display items that are larger than 1 px(?) wide
-                    if rect.width() > 1:
-                        rectItem = QGraphicsRectItem(rect)
+                    #Only display items that are larger than 2 px(?) wide
+                    if rect.width() > 2:
+                        rectItem = BedRectItem(rect,line)
                         rectItem.setBrush(Qt.green)
                         self.bedScene.addItem(rectItem)
+                        toolText = line[3]
+                        textItem = QGraphicsTextItem(toolText)
+                        font = QFont()
+                        font.setPointSize(8)
+                        textItem.setFont(font)
+                        #Only display the name on the rect if there's space for it
+                        if textItem.boundingRect().width() < rectItem.boundingRect().width():
+                            #The item should not block events to underlying rect..
+                            self.bedScene.addItem(textItem)
+                            textItem.setPos(QPointF(itemStart,itemY))
             itemY += itemHeight+10
 
     #Reads a bed file and adds a list of bed elements for each chromosome
     def addBed(self):
-        #Construct a dict to contain all relevant lines for each chromosome
-        #Each line should have final format [bed,start,end,text1...]
-        newBedList = {}
-        bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
-        "bed files (*.bed)")[0]
-        if bedFile:
+        newBedDict = common.createBedDict()
+        #For each constructed list, search for appropriate chromosome to insert into
+        for key in newBedDict.keys():
+            if key in self.bedDict.keys():
+                self.bedDict[key].append(newBedDict[key])
+        self.updatePlot()
+
+    def markVariants(self):
+        chromo = self.chromosomes[self.activeChromo]
+        variants = common.returnVariants(chromo,self.varTable)
+        for variant in variants:
+            bpStart = variant[1]
+            bpEnd = variant[3]
+            if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                pen = QPen()
+                pen.setStyle(Qt.DashLine)
+                regionGraphic = QGraphicsRectItem(regionRect)
+                regionGraphic.setBrush(Qt.red)
+                regionGraphic.setPen(pen)
+                regionGraphic.setOpacity(0.6)
+                self.mainScene.addItem(regionGraphic)
+
+    #Reads a tab file (with GC content) and adds a list of excluded regions in each chromosome
+    def addExcludeGCFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
+        "tab files (*.tab)")[0]
+        if excludeFile:
             reader = data.Reader()
-            bedLines = reader.readGeneralTab(bedFile)
-            bedFileName = bedFile.split('/')[-1].replace('.bed','')
-            for line in bedLines:
-                chrName = line[0]
-                #If this is a new chrName, construct empty list
-                if not chrName in newBedList:
-                    newBedList[chrName] = []
-                #Add the bed name as first element to identify this list, remove chr field
-                lineElements = [bedFileName]
-                line.pop(0)
-                lineElements.extend(line)
-                newBedList[chrName].append(lineElements)
-            #For each constructed list, search for appropriate chromosome to insert into
-            for key in newBedList.keys():
-                if key in self.bedDict.keys():
-                    self.bedDict[key].append(newBedList[key])
-            self.updatePlot()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Read each line and look for positions markd with (-1)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, pos1, pos2, value
+                if line[3] == '-1.0':
+                    region = [int(line[1]), int(line[2])]
+                    if line[0] in self.excludeDict:
+                        self.excludeDict[line[0]].append(region)
+        self.updatePlot()
+
+    #Reads a tab file (with any defined region) and adds a list of excluded regions in each chromosome
+    def addExcludeFile(self):
+        excludeFile = QFileDialog.getOpenFileName(None,"Specify exclude file",QDir.currentPath(),
+        "exclude files (*.tab *.txt)")[0]
+        if excludeFile:
+            reader = data.Reader()
+            excludeLines = reader.readGeneralTab(excludeFile)
+            #Create a dict and for each chromosome, create a list with excluded positions
+            for line in excludeLines:
+                #Formatted as chr, start, end
+                region = [int(line[1]), int(line[2])]
+                if line[0] in self.excludeDict:
+                    self.excludeDict[line[0]].append(region)
+        self.updatePlot()
+
+    #Iterates through excluded regions in active chromsome and removes plot points
+    #Might be done in a more efficient way considering performance issues
+    def excludeRegions(self):
+        chromo = self.chromosomes[self.activeChromo]
+        for region in self.excludeDict[chromo.name]:
+            bpStart = region[0]
+            bpEnd = region[1]
+            if bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                intersectingItems = self.mainScene.items(regionRect)
+                for item in intersectingItems:
+                     if item.data(0) == 'plotItem':
+                         self.mainScene.removeItem(item)
 
 #Handles events for main graph area
 class CoverageGraphicsView(QGraphicsView):
@@ -560,7 +648,7 @@ class CoverageGraphicsView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-#Graphics view for bed tracks, with disabled events
+#Graphics view for bed tracks, with most events disabled
 class BedGraphicsView(QGraphicsView):
 
     def __init__(self,scene):
@@ -570,10 +658,67 @@ class BedGraphicsView(QGraphicsView):
         pass
 
     def wheelEvent(self,event):
-        pass
+        #Only allow vertical scroll
+        if event.orientation() == Qt.Vertical:
+            QGraphicsView.wheelEvent(self, event)
+        else:
+            pass
 
     def mousePressEvent(self,event):
-        pass
+        item = self.itemAt(event.pos())
+        if item and item.data(0) == 'bedRect':
+            item.toggleMarked()
+            menu = QMenu()
+            linkAct = QAction("OMIM search: " + item.bedText, self)
+            linkAct.triggered.connect(lambda: self.openLink(item.bedText))
+            menu.addAction(linkAct)
+            menu.exec_(QCursor.pos())
+            item.toggleMarked()
+
+    def contextMenuEvent(self,event):
+        menu = QMenu()
+        #Should connect to a function to change default color for a track
+        trackColorAct = QAction('Select track colors',self)
+        menu.addAction(trackColorAct)
+        menu.exec_(QCursor.pos())
+
+    #Primitive function to search for bed item name in OMIM database
+    #Currently opens a browser and simply searches for the term, but could use omim REST-api?
+    def openLink(self,linkText):
+        linkUrl = QUrl("https://www.ncbi.nlm.nih.gov/omim/?term=" + linkText)
+        QDesktopServices.openUrl(linkUrl)
+
+#Bed graphic item with some convenience functions for marking etc
+class BedRectItem(QGraphicsRectItem):
+
+    def __init__(self,rect,bedFields):
+        super().__init__(rect)
+        self.bedText = bedFields[3]
+        self.setToolTip(self.bedText)
+        self.marked = False
+        self.setData(0,"bedRect")
+
+    def toggleMarked(self):
+        if not self.marked:
+            pen = self.pen()
+            pen.setStyle(Qt.DashLine)
+            pen.setBrush(Qt.red)
+        else:
+            pen = QPen()
+        self.setPen(pen)
+        self.marked = not self.marked
+
+    def setMarked(self):
+        pen = self.pen()
+        pen.setStyle(Qt.DashLine)
+        pen.setBrush(Qt.red)
+        self.setPen(pen)
+        self.marked = True
+
+    def setUnmarked(self):
+        pen = QPen()
+        self.setPen(pen)
+        self.marked = False
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
