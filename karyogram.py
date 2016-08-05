@@ -291,6 +291,10 @@ class KaryogramView(QGraphicsView):
 
     def drawConnections(self):
         self.connectionGraphicItems = []
+        selectedVariants = []
+        if self.activeChromo and self.varTable:        
+            selectedChromo = self.activeChromo
+            selectedVariants = common.returnVariants(selectedChromo,self.varTable)
         placeLeft = True
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         for chrA in self.chromosomes:
@@ -301,7 +305,6 @@ class KaryogramView(QGraphicsView):
                 chrA.createConnections()
             for connection in chrA.connections:
                 #The information is stored as string elements and needs to be converted to integers
-                print(1)
                 if connection[1] == 'X':
                     chrBIndex=22
                     chrB = self.chromosomes[chrBIndex]
@@ -313,8 +316,7 @@ class KaryogramView(QGraphicsView):
                 else:
                     chrB = self.chromosomes[int(connection[1])-1]
                 if not chrB.display or connection[4] is None:
-                    continue
-                print(2)    
+                    continue 
                 #If chrA higher in order than chrB, WINA and WINB are switched, so check this first    
                 if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
                     connEndPos = int(connection[2].split(',')[1])
@@ -335,12 +337,10 @@ class KaryogramView(QGraphicsView):
                 #do not show small variants within one cytoband
                 if cbandA == cbandB:
                     continue
-                print(3)
                 #The x-positions are accessed, the chromosome A x-pos has the chromosome width added to it. This will make the connection start on its right side
                 #First check if these cytobands exist, in case of discrepancy in vcf and cytoband files
                 if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
                     continue
-                print(4)
                 if chrA.name == chrB.name:    
                     if placeLeft:
                         xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
@@ -380,8 +380,14 @@ class KaryogramView(QGraphicsView):
                 pen = QPen()
                 #pen.setBrush(cBandBItem.brush())
                 pen.setBrush(Qt.darkYellow)
+                for variant in selectedVariants:
+                    if variant[0] is not variant[2]:
+                        variantConnection = [variant[0],variant[2],variant[5]["WINA"],variant[5]["WINB"],variant[8]]
+                    else:
+                        variantConnection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), variant[8]]
+                    if variantConnection == connection:
+                        pen.setBrush(Qt.cyan)
                 connectionItem.setPen(pen)
-                print(connectionItem)
                 self.scene.addItem(connectionItem)
                 self.connectionGraphicItems.append(connectionItem)
 
@@ -519,31 +525,83 @@ class KaryogramView(QGraphicsView):
         if self.activeChromo and self.varTable:
             chrA = self.activeChromo
             variants = common.returnVariants(chrA,self.varTable)
-            chromoHeight = 0
-            xPos = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
-            yPos = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).top()
+            chrAHeight = 0
+            xPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
+            yPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).top()
             for band in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
-                chromoHeight += band.mapRectToScene(band.boundingRect()).height()
-            chromoWidth = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).width()
-            chromoLength = int(chrA.end)
+                chrAHeight += band.mapRectToScene(band.boundingRect()).height()
+            chrAWidth = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).width()
+            chrALength = int(chrA.end)
             for variant in variants:
-                if not variant[9] or (variant[4] == "BND" and variant[0] is not variant[2]):
+                #if variant.display is false
+                if not variant[9] or variant[2].startswith("G"):
                     continue
-                startPos = variant[1]
-                endPos = variant[3]
-                variantLength = endPos-startPos
-                variantHeight = (variantLength/chromoLength)*chromoHeight
-                markRect = QRect(xPos, yPos + (startPos/chromoLength)*chromoHeight, chromoWidth, variantHeight)
-                markRectItem = QGraphicsRectItem(markRect)
-                if variant[4] == "DEL":
-                    markRectItem.setBrush(QBrush(Qt.red))
-                elif variant[4] == "DUP":
-                    markRectItem.setBrush(QBrush(Qt.green))
-                else:   
-                    markRectItem.setBrush(QBrush(Qt.blue))
-                markRectItem.setOpacity(0.5)
-                self.scene.addItem(markRectItem)
-                self.variantMarkItems.append(markRectItem)
+                if "WINA" in variant[5]:
+                    chrB = self.chromosomeDict[variant[2]]
+                    chrBHeight = 0
+                    xPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).left()
+                    yPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).top()
+                    for band in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
+                        chrBHeight += band.mapRectToScene(band.boundingRect()).height()
+                    chrBWidth = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).width()
+                    chrBLength = int(chrB.end)
+                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                            startWinA = int(variant[5]["WINB"].split(',')[0])
+                            endWinA = int(variant[5]["WINB"].split(',')[1])
+                            startWinB = int(variant[5]["WINA"].split(',')[0])
+                            endWinB = int(variant[5]["WINA"].split(',')[1])
+                    else: 
+                            startWinA = int(variant[5]["WINA"].split(',')[0])
+                            endWinA = int(variant[5]["WINA"].split(',')[1])
+                            startWinB = int(variant[5]["WINB"].split(',')[0])
+                            endWinB = int(variant[5]["WINB"].split(',')[1])
+                    lengthWinA = endWinA - startWinA
+                    lengthWinB = endWinB - startWinB
+                    markHeightA = (lengthWinA/chrALength)*chrAHeight
+                    markHeightB = (lengthWinB/chrBLength)*chrBHeight
+                    markRectA = QRect(xPosA, yPosA + (startWinA/chrALength)*chrAHeight, chrAWidth, markHeightA)
+                    markRectB = QRect(xPosB, yPosB + (startWinB/chrBLength)*chrBHeight, chrBWidth, markHeightB)
+                    markRectItemA = QGraphicsRectItem(markRectA)
+                    markRectItemB = QGraphicsRectItem(markRectB)
+                    if variant[4] == "DEL":
+                        markRectItemA.setBrush(QBrush(Qt.red))
+                        markRectItemB.setBrush(QBrush(Qt.red))
+                    elif variant[4] == "DUP":
+                        markRectItemA.setBrush(QBrush(Qt.green))
+                        markRectItemB.setBrush(QBrush(Qt.green))
+                    else:   
+                        markRectItemA.setBrush(QBrush(Qt.blue))
+                        markRectItemB.setBrush(QBrush(Qt.blue))
+                    markRectItemA.setBrush(QBrush(Qt.blue))
+                    markRectItemB.setBrush(QBrush(Qt.blue))
+                    markRectItemA.setOpacity(0.5)
+                    markRectItemB.setOpacity(0.5)
+                    self.cytoGraphicItems[chrA.name].addToGroup(markRectItemA)
+                    self.cytoGraphicItems[chrB.name].addToGroup(markRectItemB)
+                    self.scene.addItem(markRectItemA)
+                    self.scene.addItem(markRectItemB)
+                    self.variantMarkItems.append(markRectItemA)
+                    self.variantMarkItems.append(markRectItemB)
+
+                else:
+                    
+                    startPos = variant[1]
+                    endPos = variant[3]
+                    variantLength = endPos-startPos
+                    variantHeight = (variantLength/chrALength)*chrAHeight
+                    markRect = QRect(xPosA, yPosA + (startPos/chrALength)*chrAHeight, chrAWidth, variantHeight)
+                    markRectItem = QGraphicsRectItem(markRect)
+                    if variant[4] == "DEL":
+                        markRectItem.setBrush(QBrush(Qt.red))
+                    elif variant[4] == "DUP":
+                        markRectItem.setBrush(QBrush(Qt.green))
+                    else:   
+                        markRectItem.setBrush(QBrush(Qt.blue))
+                    markRectItem.setOpacity(0.5)
+                    self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
+                    self.scene.addItem(markRectItem)
+                    self.variantMarkItems.append(markRectItem)
+                    
           
     def updateItems(self):
         #Should use clear instead of individually removing..
