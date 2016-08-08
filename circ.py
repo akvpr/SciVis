@@ -34,6 +34,7 @@ class CircView(QGraphicsView):
         self.connWidth = int(self.circularSettings["connWidth"])
         self.showChrNames = self.circularSettings["showChrNames"] == "True"
         self.showCentromereRegion = self.circularSettings["showCentromereRegion"] == "True"
+        self.minBedBp = 500
         self.createSettings()
 
         self.coverageNormLog = self.dataDict['coverageNormLog']
@@ -121,6 +122,12 @@ class CircView(QGraphicsView):
         showCentromereRegionCheck.setCheckable(True)
         showCentromereRegionCheck.setCheckState(Qt.Unchecked)
         showCentromereRegionCheck.setEditable(False)
+        minBedBpText = QStandardItem("Minimum bed bp (kb)")
+        minBedBpText.setEditable(False)
+        minBedBpText.setToolTip("Items with a smaller length will be hidden in the track viewer")
+        minBedBpData = QStandardItem()
+        minBedBpData.setData(self.minBedBp,0)
+        minBedBpData.setEditable(True)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
         self.settingsModel.setItem(1,0,distResText)
@@ -137,6 +144,8 @@ class CircView(QGraphicsView):
         self.settingsModel.setItem(6,1,showChrNameCheck)
         self.settingsModel.setItem(7,0,showCentromereRegionText)
         self.settingsModel.setItem(7,1,showCentromereRegionCheck)
+        self.settingsModel.setItem(8,0,minBedBpText)
+        self.settingsModel.setItem(8,1,minBedBpData)
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
@@ -167,6 +176,8 @@ class CircView(QGraphicsView):
                     self.showCentromereRegion = True
                 else:
                     self.showCentromereRegion = False
+            if row == 8:
+                self.minBedBp = item.data(0)
         self.initscene()
 
     #Creates and returns a widget with this view's settings
@@ -922,10 +933,10 @@ class CircView(QGraphicsView):
                     #if the files are slightly misaligned, set maximum end to chromo end
                     if regionEnd > int(chromo.end):
                         regionEnd = int(chromo.end)
-                    regionStartAngle = startAngle + (regionStart/int(chromo.end))*angleSpan
-                    regionEndAngle = startAngle + (regionEnd/int(chromo.end))*angleSpan
+                    regionStartAngle = startAngle + (regionStart/int(chromo.end))*(angleSpan-2)
+                    regionEndAngle = startAngle + (regionEnd/int(chromo.end))*(angleSpan-2)
                     #Only construct an item if the span is larger than one degree
-                    if regionEndAngle - regionStartAngle < 0.1:
+                    if (regionEnd-regionStart) <= self.minBedBp*1000:
                         continue
                     #Define two painter paths constructing circle sectors
                     outer = QPainterPath()
