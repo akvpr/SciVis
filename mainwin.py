@@ -32,6 +32,13 @@ class SciVisView(QMainWindow):
         self.newIcon = QIcon("icons/new.png")
         self.saveIcon = QIcon("icons/save.png")
         self.settingsIcon = QIcon("icons/settings.png")
+        #Load config file
+        self.reader = data.Reader()
+        self.reader.readConfig("userSettings.conf")
+        self.circularConfig = self.reader.returnCircConfig()
+        self.coverageConfig = self.reader.returnCovConfig()
+        self.karyoConfig = self.reader.returnKaryoConfig()
+        self.heatmapConfig = self.reader.returnHeatmapConfig()
         #Create actions for menus and toolbars, connect to functions
         newCircAct = QAction('New circular diagram',self)
         newCircAct.triggered.connect(self.newCirc)
@@ -45,10 +52,6 @@ class SciVisView(QMainWindow):
         exitAct.triggered.connect(self.close)
         exportImageAct = QAction('Export image',self)
         exportImageAct.triggered.connect(self.exportImage)
-        viewDatasetsAct = QAction('View datasets',self)
-        viewDatasetsAct.triggered.connect(self.viewDatasets)
-        saveDatasetAct = QAction('Save dataset',self)
-        saveDatasetAct.triggered.connect(self.saveDataset)
         viewSettingsAct = QAction('Settings',self)
         viewSettingsAct.triggered.connect(self.viewSettings)
         #Create menus, and add actions
@@ -59,8 +62,6 @@ class SciVisView(QMainWindow):
         self.fileMenu.addAction(newCovDiagramAct)
         self.fileMenu.addAction(newKaryogramAct)
         self.fileMenu.addAction(newHeatmapAct)
-        self.fileMenu.addAction(viewDatasetsAct)
-        self.fileMenu.addAction(saveDatasetAct)
         self.fileMenu.addAction(viewSettingsAct)
         self.fileMenu.addAction(exportImageAct)
         self.fileMenu.addAction(exitAct)
@@ -568,7 +569,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = circ.CircView(selectedData,self)
+            view = circ.CircView(selectedData,self.circularConfig,self)
             self.views.append(view)
             self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Circular")
@@ -585,7 +586,7 @@ class SciVisView(QMainWindow):
         if selectedData is not None:
             self.activeScene = True
             self.update()
-            view = coverage.CoverageView(selectedData,self)
+            view = coverage.CoverageView(selectedData,self.coverageConfig,self)
             self.views.append(view)
             self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Coverage")
@@ -602,7 +603,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = karyogram.KaryogramView(selectedData,self)
+            view = karyogram.KaryogramView(selectedData,self.karyoConfig,self)
             self.views.append(view)
             self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Karyogram")
@@ -618,7 +619,7 @@ class SciVisView(QMainWindow):
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             self.activeScene = True
-            view = heatmap.HeatmapView(selectedData,self)
+            view = heatmap.HeatmapView(selectedData,self.heatmapConfig,self)
             self.views.append(view)
             self.viewChromosomes.append(0)
             tabIndex = self.sceneTabs.addTab(view,"Heatmap")
@@ -703,10 +704,16 @@ class SciVisView(QMainWindow):
         okButton.clicked.connect(settingsDia.accept)
         applyButton = QPushButton('Apply', settingsDia)
         applyButton.clicked.connect(self.updateSettings)
+        saveSettingsButton = QPushButton('Save settings', settingsDia)
+        saveSettingsButton.clicked.connect(self.saveSettings)
+        resetSettingsButton = QPushButton('Reset settings to default', settingsDia)
+        resetSettingsButton.clicked.connect(self.resetSettings)
         settingsLayout.addWidget(stackList,0,0)
         settingsLayout.addWidget(settingsStack,0,1)
         settingsLayout.addWidget(okButton,1,0,1,1)
         settingsLayout.addWidget(applyButton,1,1,1,1)
+        settingsLayout.addWidget(saveSettingsButton,1,2,1,1)
+        settingsLayout.addWidget(resetSettingsButton,1,3,1,1)
         settingsDia.setWindowTitle("Settings")
         settingsDia.setLayout(settingsLayout)
         settingsDia.show()
@@ -716,6 +723,12 @@ class SciVisView(QMainWindow):
         if self.activeScene:
             view = self.sceneTabs.currentWidget()
             view.updateSettings()
+            
+    def saveSettings(self):
+        return 0
+        
+    def resetSettings(self):
+        return 0
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()
