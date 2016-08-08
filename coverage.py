@@ -57,13 +57,16 @@ class CoverageView(QWidget):
         self.layout.setStretch(0,0)
         self.layout.setStretch(1,1)
         self.setLayout(self.layout)
+        self.firstStart = True
 
     def startScene(self):
-        self.defineRectangles()
-        self.activeChromo = 0
-        #Dict for position marker values for chromosomes
-        self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
-        self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
+        if self.firstStart:
+            self.defineRectangles()
+            self.activeChromo = 0
+            #Dict for position marker values for chromosomes
+            self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
+            self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
+        self.firstStart = False
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -444,7 +447,6 @@ class CoverageView(QWidget):
                 self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
-        self.defineRectangles()
         chromo = self.chromosomes[self.activeChromo]
         #Save position and size of current chromosome marker before clearing
         mRect = self.selectorItem.returnMarkerRect()
@@ -523,7 +525,6 @@ class CoverageView(QWidget):
         self.updatePlot()
 
     def addTracks(self,chromo):
-        self.defineRectangles()
         self.updateLimits()
         #Increase size of bed area in splitter to 100 if not showing
         splitterSizes = self.splitter.sizes()
@@ -791,7 +792,8 @@ class DelDupLimitItem(QGraphicsItemGroup):
             self.dupLineItem.setLine(newLine)
 
     def mouseReleaseEvent(self,event):
-        self.setCursor(Qt.OpenHandCursor)
+        if self.cursor().shape() == Qt.ClosedHandCursor:
+            self.setCursor(Qt.OpenHandCursor)
         #Make sure marker is not outside of limits
         delLine = self.delLineItem.line()
         dupLine = self.dupLineItem.line()
