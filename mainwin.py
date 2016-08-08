@@ -711,7 +711,7 @@ class SciVisView(QMainWindow):
         settingsDia.setLayout(settingsLayout)
         settingsDia.show()
 
-    #Should update settings only on apply (currently updates on item change and color pick).
+    #Updates settings for active view
     def updateSettings(self):
         if self.activeScene:
             view = self.sceneTabs.currentWidget()
@@ -738,11 +738,10 @@ class SciVisView(QMainWindow):
             if view.type == 'karyogram':
                 varTable = varWidget.layout().itemAtPosition(1,0).widget()
                 selModel = varTable.selectionModel()
-                selModel.selectionChanged.connect(view.updateItems) 
+                selModel.selectionChanged.connect(view.updateItems)
                 view.setActiveChromosome(selectedRow,varTable)
             if view.type == 'circ':
                 varTable = varWidget.layout().itemAtPosition(1,0).widget()
                 selModel = varTable.selectionModel()
                 selModel.selectionChanged.connect(view.initscene)
                 view.setActiveChromosome(selectedRow,varTable)
-                
