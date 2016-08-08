@@ -9,10 +9,11 @@ from PySide.QtGui import *
 
 class CircView(QGraphicsView):
 
-    def __init__(self,dataDict,parent):
+    def __init__(self,dataDict,circularSettings,parent):
         self.type = "circ"
         self.scene = CircScene()
         super().__init__(self.scene,parent)
+        self.circularSettings = circularSettings
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
@@ -24,15 +25,15 @@ class CircView(QGraphicsView):
         self.coverageItems = []
         self.connectionItems = {}
 
-        self.bpWindow = 500
-        self.bpDistanceResolution = 10
-        self.useCoverageLog = True
-        self.minCoverage = 0.5
-        self.maxCoverage = 1.5
+        self.bpWindow = int(self.circularSettings["bpWindow"])
+        self.bpDistanceResolution = int(self.circularSettings["bpDistanceResolution"])
+        self.useCoverageLog = self.circularSettings["useCoverageLog"] == "True"
+        self.minCoverage = int(self.circularSettings["minCoverage"])/100
+        self.maxCoverage = int(self.circularSettings["maxCoverage"])/100
         self.startColor = QColor.fromRgb(243,241,172)
-        self.connWidth = 1
-        self.showChrNames = True
-        self.showCentromereRegion = False
+        self.connWidth = int(self.circularSettings["connWidth"])
+        self.showChrNames = self.circularSettings["showChrNames"] == "True"
+        self.showCentromereRegion = self.circularSettings["showCentromereRegion"] == "True"
         self.minBedBp = 500
         self.createSettings()
 

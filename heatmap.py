@@ -3,16 +3,18 @@ from PySide.QtCore import *
 from PySide.QtGui import *
 import numpy as np
 import math
+import data
 
 class HeatmapView(QGraphicsView):
 
-    def __init__(self,dataDict, parent):
+    def __init__(self,dataDict,heatmapSettings, parent):
 
         self.scene = QGraphicsScene()
         self.type = "heatmap"
         super().__init__(self.scene, parent)
         self.dataDict = dataDict
         self.chromosomes = self.dataDict['chromosomeList']
+        self.heatmapSettings = heatmapSettings
         self.variantNames = {"BND":"Break end", "DEL":"Deletion", "DUP":"Duplication", "IDUP":"Interspersed duplication", "INS":"Insertion", "INV":"Inversion", "TDUP":"Tandem duplication", "TLOC":"Translocation"}
         self.resize(QDesktopWidget().availableGeometry(self).size())
         self.bpWindow = 50
@@ -397,7 +399,7 @@ class HeatmapView(QGraphicsView):
                             counter = counter + 1
                             B[i][j] = counter
                             
-                    elif (variant[4]==mapping and variant[9]):
+                    elif (variant[5]["SVTYPE"]==mapping and variant[9]):
                         start = int(variant[1])
                         end = int(variant[3])
                         #going through the elements to check if an interaction is made there, if it is -> add a "hit" i.e. counter increases by one

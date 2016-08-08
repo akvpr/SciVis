@@ -13,6 +13,10 @@ class Reader():
         self.coverageNormLog = 0
         self.colorTabInfo = []
         self.cytoTabInfo = []
+        self.circularConfig = {}
+        self.coverageConfig = {}
+        self.karyoConfig = {}
+        self.heatmapConfig = {}
 
     #Reads a tab file with name string given by toRead.
     #Constructs a list of chromosome items, one per chromosome, and inserts
@@ -214,6 +218,42 @@ class Reader():
                 fields[-1] = fields[-1].strip('\n')
                 tabLines.append(fields)
         return tabLines
+        
+    def readConfig(self, toRead):
+        with open(toRead, 'r') as config:
+            activeSection = "CIRCULAR"
+            for line in config:
+                if line.startswith('['):
+                    if line.startswith('[CIRCULAR]'):
+                        activeSection = 'CIRCULAR'
+                    elif line.startswith('[COVERAGE]'):
+                        activeSection = 'COVERAGE'
+                    elif line.startswith('[KARYOGRAM]'):
+                        activeSection = 'KARYOGRAM'
+                    elif line.startswith('[HEATMAP]'):
+                        activeSection = 'HEATMAP'
+                else:
+                    if activeSection == "CIRCULAR":
+                        fields = line.split('=')
+                        self.circularConfig[fields[0]] = fields[1].strip('\n')
+                    elif activeSection == "COVERAGE":
+                        fields = line.split('=')
+                        self.coverageConfig[fields[0]] = fields[1].strip('\n')
+                    elif activeSection == "KARYOGRAM":
+                        fields = line.split('=')
+                        self.karyoConfig[fields[0]] = fields[1].strip('\n')
+                    elif activeSection == "HEATMAP":
+                        fields = line.split('=')
+                        self.heatmapConfig[fields[0]] = fields[1].strip('\n')
+                        
+    def returnCircConfig(self):
+        return self.circularConfig
+    def returnCovConfig(self):
+        return self.coverageConfig
+    def returnKaryoConfig(self):
+        return self.karyoConfig
+    def returnHeatmapConfig(self):
+        return self.heatmapConfig
 
 class Chromosome():
 

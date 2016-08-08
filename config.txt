@@ -1,0 +1,22 @@
+CIRCULAR
+    bpResolution=500
+    distanceBetweenMarkers=10
+    usageOfLog2=True
+    minCoverage=50
+    maxCoverage=150
+    connectionWidth=1
+    showChromosomeNames=True
+    markCentromeres=False
+
+COVERAGE
+bpResolution=100
+duplicationLimit=2.25
+deletionLimit=1.75
+minCoverage=0
+maxCoverage=500
+
+KARYOGRAM:
+itemsPerRow=6
+
+HEATMAP:
+
