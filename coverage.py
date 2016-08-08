@@ -36,6 +36,7 @@ class CoverageView(QWidget):
         self.dupLimit = 2.25
         self.delLimit = 1.75
         self.plotType = 0
+        self.minBedBp = 500
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
@@ -108,6 +109,12 @@ class CoverageView(QWidget):
         maxCovLimitData = QStandardItem()
         maxCovLimitData.setData(self.maxCoverage*100,0)
         maxCovLimitData.setEditable(True)
+        minBedBpText = QStandardItem("Minimum bed bp (kb)")
+        minBedBpText.setEditable(False)
+        minBedBpText.setToolTip("Items with a smaller length will be hidden in the track viewer")
+        minBedBpData = QStandardItem()
+        minBedBpData.setData(self.minBedBp,0)
+        minBedBpData.setEditable(True)
         self.settingsModel.setItem(0,0,bpWinText)
         self.settingsModel.setItem(0,1,bpWinData)
         self.settingsModel.setItem(1,0,dupLimitText)
@@ -118,6 +125,8 @@ class CoverageView(QWidget):
         self.settingsModel.setItem(3,1,minCovLimitData)
         self.settingsModel.setItem(4,0,maxCovLimitText)
         self.settingsModel.setItem(4,1,maxCovLimitData)
+        self.settingsModel.setItem(5,0,minBedBpText)
+        self.settingsModel.setItem(5,1,minBedBpData)
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
@@ -133,6 +142,8 @@ class CoverageView(QWidget):
                 self.minCoverage = item.data(0)/100
             if row == 4:
                 self.maxCoverage = item.data(0)/100
+            if row == 5:
+                self.minBedBp = item.data(0)
         self.updatePlot()
 
     #Creates and returns a widget with this view's settings
@@ -346,14 +357,8 @@ class CoverageView(QWidget):
                           QPointF(self.graphArea.right(),self.graphArea.bottom()-self.dupLimit*yAxisIncrement) )
         delLine = QLineF( QPointF(self.graphArea.left(),self.graphArea.bottom()-self.delLimit*yAxisIncrement),
                           QPointF(self.graphArea.right(),self.graphArea.bottom()-self.delLimit*yAxisIncrement) )
-        dupLineItem = QGraphicsLineItem(dupLine)
-        dupLineItem.setPen(QPen(Qt.darkRed))
-        dupLineItem.setOpacity(0.6)
-        delLineItem = QGraphicsLineItem(delLine)
-        delLineItem.setPen(QPen(Qt.darkRed))
-        delLineItem.setOpacity(0.6)
-        self.mainScene.addItem(dupLineItem)
-        self.mainScene.addItem(delLineItem)
+        self.delDupLimits = DelDupLimitItem(delLine,dupLine,self.graphArea,self)
+        self.mainScene.addItem(self.delDupLimits)
 
         #Create y ticks (as times average genome coverage), also height markers
         markerPen = QPen()
@@ -498,6 +503,14 @@ class CoverageView(QWidget):
         limits = [regionStart, regionLength]
         self.limits = limits
 
+    def updateDelDup(self,delLine,dupLine):
+        coverageSpan = (self.maxCoverage - self.minCoverage)*2
+        self.delLimit = round( ( self.graphArea.bottom() - delLine.y1() ) / self.graphArea.height() * coverageSpan, 2)
+        self.dupLimit = round( ( self.graphArea.bottom() - dupLine.y1() ) / self.graphArea.height() * coverageSpan, 2)
+        #Update the limits in the settings model as well
+        self.settingsModel.item(1,1).setData(self.dupLimit,0)
+        self.settingsModel.item(2,1).setData(self.delLimit,0)
+
     def setActiveChromosome(self,chromoNumber,varTable):
         #Before switching, save current marker for this chr
         self.chromoSelectorRects[self.chromosomes[self.activeChromo].name] = self.selectorItem.returnMarkerRect()
@@ -535,8 +548,8 @@ class CoverageView(QWidget):
                     itemStart = self.trackArea.left() + (int(line[1])-self.limits[0]) / (viewedBp) * maxLength
                     itemWidth = (int(line[2])-int(line[1])) / (viewedBp) * maxLength
                     rect = QRectF(itemStart,itemY,itemWidth,itemHeight)
-                    #Only display items that are larger than 2 px(?) wide
-                    if rect.width() > 2:
+                    #Only display items that are larger than min limit
+                    if (int(line[2])-int(line[1])) >= self.minBedBp*1000:
                         rectItem = BedRectItem(rect,line)
                         rectItem.setBrush(Qt.green)
                         self.bedScene.addItem(rectItem)
@@ -719,6 +732,78 @@ class BedRectItem(QGraphicsRectItem):
         pen = QPen()
         self.setPen(pen)
         self.marked = False
+
+#Item group for del and dup limits, draggable
+class DelDupLimitItem(QGraphicsItemGroup):
+
+    def __init__(self,delLine,dupLine,graphArea,parent):
+        super().__init__()
+        self.parent = parent
+        self.graphArea = graphArea
+        self.setAcceptHoverEvents(True)
+        self.delLineItem = QGraphicsLineItem(delLine)
+        self.delLineItem.setPen(QPen(Qt.darkRed))
+        self.delLineItem.setOpacity(0.6)
+        self.dupLineItem = QGraphicsLineItem(dupLine)
+        self.dupLineItem.setPen(QPen(Qt.darkRed))
+        self.dupLineItem.setOpacity(0.6)
+        self.delDragRect = QRectF(delLine.p1(),delLine.p2())
+        self.delDragRect.setTop(delLine.y1() - 5)
+        self.delDragRect.setBottom(delLine.y1() + 5)
+        self.dupDragRect = QRectF(dupLine.p1(),dupLine.p2())
+        self.dupDragRect.setTop(dupLine.y1() - 5)
+        self.dupDragRect.setBottom(dupLine.y1() + 5)
+        self.addToGroup(self.delLineItem)
+        self.addToGroup(self.dupLineItem)
+        self.draggingDel = False
+        self.draggingDup = False
+
+    def hoverMoveEvent(self,event):
+        if self.delDragRect.contains(event.pos()) or self.dupDragRect.contains(event.pos()):
+            self.setCursor(Qt.OpenHandCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+        QGraphicsItem.hoverMoveEvent(self,event)
+
+    def mousePressEvent(self,event):
+        if self.delDragRect.contains(event.pos()):
+            self.draggingDel = True
+        if self.dupDragRect.contains(event.pos()):
+            self.draggingDup = True
+        if self.cursor().shape() == Qt.OpenHandCursor:
+            self.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self,event):
+        yPos = event.pos().y()
+        #Should not be able to be dragged outside of full size boundary,
+        #or too close to selection opposite edge
+        if ( self.draggingDel and yPos > self.dupLineItem.line().y1()+10 ):
+            if yPos > self.graphArea.bottom():
+                yPos = self.graphArea.bottom()
+            newLine = self.delLineItem.line()
+            newLine.setPoints(QPointF(newLine.x1(),yPos), QPointF(newLine.x2(),yPos))
+            self.delLineItem.setLine(newLine)
+        elif ( self.draggingDup and yPos < self.delLineItem.line().y1()-10 ):
+            if yPos < self.graphArea.top():
+                yPos = self.graphArea.top()
+            newLine = self.dupLineItem.line()
+            newLine.setPoints(QPointF(newLine.x1(),yPos), QPointF(newLine.x2(),yPos))
+            self.dupLineItem.setLine(newLine)
+
+    def mouseReleaseEvent(self,event):
+        self.setCursor(Qt.OpenHandCursor)
+        #Make sure marker is not outside of limits
+        delLine = self.delLineItem.line()
+        dupLine = self.dupLineItem.line()
+        if delLine.y1() > self.graphArea.bottom():
+            delLine.setPoints(QPointF(delLine.x1(),self.graphArea.bottom()), QPointF(delLine.x2(),self.graphArea.bottom()))
+            self.delLineItem.setLine(delLine)
+        if dupLine.y1() < self.graphArea.top():
+            dupLine.setPoints(QPointF(dupLine.x1(),self.graphArea.bottom()), QPointF(dupLine.x2(),self.graphArea.bottom()))
+            self.dupLineItem.setLine(dupLine)
+        #Update the plot on release
+        self.parent.updateDelDup(self.delLineItem.line(),self.dupLineItem.line())
+        self.parent.updatePlot()
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
