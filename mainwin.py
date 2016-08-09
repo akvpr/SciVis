@@ -33,12 +33,7 @@ class SciVisView(QMainWindow):
         self.saveIcon = QIcon("icons/save.png")
         self.settingsIcon = QIcon("icons/settings.png")
         #Load config file
-        self.reader = data.Reader()
-        self.reader.readConfig("userSettings.conf")
-        self.circularConfig = self.reader.returnCircConfig()
-        self.coverageConfig = self.reader.returnCovConfig()
-        self.karyoConfig = self.reader.returnKaryoConfig()
-        self.heatmapConfig = self.reader.returnHeatmapConfig()
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig) = data.readConfig("userSettings.conf")
         #Create actions for menus and toolbars, connect to functions
         newCircAct = QAction('New circular diagram',self)
         newCircAct.triggered.connect(self.newCirc)
@@ -269,19 +264,20 @@ class SciVisView(QMainWindow):
             self.datasetModel.appendRow(dataItem)
 
     #Creates data model item, and adds to main dataset model
-    def createDatasetItem(self, reader, setname):
-        #Should display setname as parent
-        dataItem = QStandardItem(setname)
-        #Create a dict storing the actual data, and attach to item
-        chromosomeList = reader.returnChrList()
-        coverageNormLog = reader.returnCoverageNormLog()
-        coverageNorm = reader.returnCoverageNorm()
-        vcfName = reader.returnVcfName()
-        tabName = reader.returnTabName()
-        cytoTab = reader.returnCytoTab()
+    def createDatasetItem(self, tabName, vcfName, setName):
+        self.statusBar().showMessage("Reading TAB..")
+        (chromosomeList,coverageNorm,coverageNormLog,totalBP) = data.readTab(tabName)
+        self.statusBar().showMessage("Reading VCF..")
+        (chromosomeList,vcfInfoLines) = data.readVCFFile(vcfName,chromosomeList)
+        self.statusBar().showMessage("Reading cytoband file..")
         cytoName = "cytoBand.txt"
+        cytoTab = data.readCytoTab(cytoName)
+        self.statusBar().clearMessage()
+        #Should display setname as parent
+        dataItem = QStandardItem(setName)
+        #Create a dict storing the actual data, and attach to item
         itemData = {'chromosomeList':chromosomeList,'coverageNormLog':coverageNormLog,'coverageNorm':coverageNorm,
-        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab,'setName':setname}
+        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab,'setName':setName}
         dataItem.setData(itemData)
         #Vcf and tab names should be child items
         vcfItem = QStandardItem(vcfName)
@@ -320,19 +316,10 @@ class SciVisView(QMainWindow):
             if tabFile:
                 vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
                 "VCF files (*.vcf)")[0]
-                cytoFile = "cytoBand.txt"
                 #Cancel results in empty string, only go ahead if not empty
                 if tabFile and vcfFile:
-                    reader = data.Reader()
-                    self.statusBar().showMessage("Reading TAB..")
-                    reader.readTab(tabFile)
-                    self.statusBar().showMessage("Reading VCF..")
-                    reader.readVCFFile(vcfFile)
-                    self.statusBar().showMessage("Reading cytoband file..")
-                    reader.readCytoTab(cytoFile)
-                    self.statusBar().clearMessage()
                     #Create a model item to be used for viewing datasets
-                    self.createDatasetItem(reader, setName)
+                    self.createDatasetItem(tabFile,vcfFile,setName)
 
     def editDataset(self,index):
         #User might have clicked on a child item with no data -- try to get parent item if so
@@ -347,20 +334,12 @@ class SciVisView(QMainWindow):
                 cytoFile = "cytoBand.txt"
                 #Cancel results in empty string, only go ahead if not empty
                 if tabFile and vcfFile:
-                    reader = data.Reader()
-                    self.statusBar().showMessage("Reading TAB..")
-                    reader.readTab(tabFile)
-                    self.statusBar().showMessage("Reading VCF..")
-                    reader.readVCFFile(vcfFile)
-                    self.statusBar().showMessage("Reading cytoband file..")
-                    reader.readCytoTab(cytoFile)
-                    self.statusBar().clearMessage()
                     #Remove current item from model, create a new item, insert item
                     oldItem = self.datasetModel.itemFromIndex(index)
                     setName = oldItem.data()["setName"]
                     oldRow = index.row()
                     self.datasetModel.removeRow(oldRow)
-                    self.createDatasetItem(reader, setName)
+                    self.createDatasetItem(tabFile,vcfFile,setName)
 
     #Opens a window showing existing datasets
     def viewDatasets(self):
@@ -726,12 +705,21 @@ class SciVisView(QMainWindow):
         if self.activeScene:
             view = self.sceneTabs.currentWidget()
             view.updateSettings()
-            
+            if view.type == 'circ':
+                self.circularConfig = view.returnSettingsDict()
+            if view.type == 'coverage':
+                self.coverageConfig = view.returnSettingsDict()
+            if view.type == 'karyogram':
+                self.karyoConfig = view.returnSettingsDict()
+            if view.type == 'heatmap':
+                self.heatmapConfig = view.returnSettingsDict()
+
     def saveSettings(self):
-        return 0
-        
+        if self.activeScene:
+            data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig)
+
     def resetSettings(self):
-        return 0
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig) = data.readConfig("defaultSettings.conf")
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()

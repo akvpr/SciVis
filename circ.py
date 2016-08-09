@@ -28,8 +28,8 @@ class CircView(QGraphicsView):
         self.bpWindow = int(self.circularSettings["bpWindow"])
         self.bpDistanceResolution = int(self.circularSettings["bpDistanceResolution"])
         self.useCoverageLog = self.circularSettings["useCoverageLog"] == "True"
-        self.minCoverage = int(self.circularSettings["minCoverage"])/100
-        self.maxCoverage = int(self.circularSettings["maxCoverage"])/100
+        self.minCoverage = float(self.circularSettings["minCoverage"])/100
+        self.maxCoverage = float(self.circularSettings["maxCoverage"])/100
         self.startColor = QColor.fromRgb(243,241,172)
         self.connWidth = int(self.circularSettings["connWidth"])
         self.showChrNames = self.circularSettings["showChrNames"] == "True"
@@ -152,20 +152,20 @@ class CircView(QGraphicsView):
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:
-                self.bpWindow = item.data(0)
+                self.bpWindow = int(item.data(0))
             if row == 1:
-                self.bpDistanceResolution = item.data(0)
+                self.bpDistanceResolution = int(item.data(0))
             if row == 2:
                 if item.checkState() == Qt.Checked:
                     self.useCoverageLog = True
                 else:
                     self.useCoverageLog = False
             if row == 3:
-                self.minCoverage = item.data(0)/100
+                self.minCoverage = int(item.data(0))/100
             if row == 4:
-                self.maxCoverage = item.data(0)/100
+                self.maxCoverage = int(item.data(0))/100
             if row == 5:
-                self.connWidth = item.data(0)
+                self.connWidth = int(item.data(0))
             if row == 6:
                 if item.checkState() == Qt.Checked:
                     self.showChrNames = True
@@ -177,7 +177,15 @@ class CircView(QGraphicsView):
                 else:
                     self.showCentromereRegion = False
             if row == 8:
-                self.minBedBp = item.data(0)
+                self.minBedBp = int(item.data(0))
+        self.circularSettings["bpWindow"] = str(self.bpWindow)
+        self.circularSettings["bpDistanceResolution"] = str(self.bpDistanceResolution)
+        self.circularSettings["useCoverageLog"] = str(self.useCoverageLog)
+        self.circularSettings["minCoverage"] = str(self.minCoverage*100)
+        self.circularSettings["maxCoverage"] = str(self.maxCoverage*100)
+        self.circularSettings["connWidth"] = str(self.connWidth)
+        self.circularSettings["showChrNames"] = str(self.showChrNames)
+        self.circularSettings["showCentromereRegion"] = str(self.showCentromereRegion)
         self.initscene()
 
     #Creates and returns a widget with this view's settings
@@ -195,6 +203,9 @@ class CircView(QGraphicsView):
         settingsLayout.addWidget(settingsList,0,0,1,3)
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
+
+    def returnSettingsDict(self):
+        return self.circularSettings
 
     #Sums the end bp for every chromosome with display toggled on
     def returnTotalDisplayedBP(self):
@@ -739,14 +750,11 @@ class CircView(QGraphicsView):
     #Imports either a tab file with specified regions to color, or a cytoband file
     def importColorTab(self):
         fileName = QFileDialog.getOpenFileName(None, "Specify a color tab-file", QDir.currentPath(), "tab-files (*.tab *.txt)")[0]
-        reader = data.Reader()
         if fileName.endswith("tab"):
-            reader.readColorTab(fileName)
-            colorTab = reader.returnColorTab()
+            colorTab = data.readGeneralTab(fileName)
             self.colorRegions(colorTab,False,1)
         else:
-            reader.readCytoTab(fileName)
-            colorTab = reader.returnCytoTab()
+            colorTab = data.readCytoTab(fileName)
             self.colorRegions(colorTab,True,1)
 
     def colorCentromeres(self):

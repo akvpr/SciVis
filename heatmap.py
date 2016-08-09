@@ -51,12 +51,12 @@ class HeatmapView(QGraphicsView):
         elif self.chromoA is not self.chromoB and self.mapping == "TLOC":
             self.clearScene()
             self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
-        
+
     def changeBinsize(self, binSize):
         self.binSize = int(binSize)
         self.clearScene()
         self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
-    
+
     def changeChromoA(self, chromoA):
         self.chromoA = self.chromosomes[chromoA]
         if self.chromosomes[chromoA] is self.chromoB and (self.mapping == "DEL" or self.mapping == "BND" or self.mapping == "DUP" or self.mapping == "IDUP" or self.mapping == "INS" or self.mapping == "INV" or self.mapping == "TDUP"):
@@ -65,7 +65,7 @@ class HeatmapView(QGraphicsView):
         elif self.chromosomes[chromoA] is not self.chromoB and self.mapping == "TLOC":
             self.clearScene()
             self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
-        
+
     def changeChromoB(self, chromoB):
         self.chromoB = self.chromosomes[chromoB]
         if self.chromosomes[chromoB] is self.chromoA and (self.mapping == "DEL" or self.mapping == "BND" or self.mapping == "DUP" or self.mapping == "IDUP" or self.mapping == "INS" or self.mapping == "INV" or self.mapping == "TDUP"):
@@ -74,7 +74,7 @@ class HeatmapView(QGraphicsView):
         elif self.chromosomes[chromoB] is not self.chromoA and self.mapping == "TLOC":
             self.clearScene()
             self.createHeatmap(self.chromoA, self.chromoB, self.binSize, self.mapping)
-            
+
     def createSettings(self):
         self.settingsModel = QStandardItemModel()
         #create header labels to distinguish different settings.
@@ -87,7 +87,7 @@ class HeatmapView(QGraphicsView):
             self.chDia.close()
         except:
             pass
-        
+
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
         self.color = QColor(self.stainColors['heatmapColor'])
@@ -109,6 +109,9 @@ class HeatmapView(QGraphicsView):
         settingsLayout.addWidget(settingsList,0,0,1,3)
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
+
+    def returnSettingsDict(self):
+        return self.heatmapSettings
 
     #Creates data model for info window
     def createChInfo(self):
@@ -380,7 +383,7 @@ class HeatmapView(QGraphicsView):
         for i in range(xAxis):
             for j in range(yAxis):
                 counter = 0
-                for variant in chromoA.variants:    
+                for variant in chromoA.variants:
                     #special case if the mapping is a translocation
                     if mapping == "TLOC" and variant[9] and variant[0] is not variant[2] and variant[2] == chromoB.name:
                         #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
@@ -389,7 +392,7 @@ class HeatmapView(QGraphicsView):
                             endWinA = int(variant[5]["WINB"].split(',')[1])
                             startWinB = int(variant[5]["WINA"].split(',')[0])
                             endWinB = int(variant[5]["WINA"].split(',')[1])
-                        else: 
+                        else:
                             startWinA = int(variant[5]["WINA"].split(',')[0])
                             endWinA = int(variant[5]["WINA"].split(',')[1])
                             startWinB = int(variant[5]["WINB"].split(',')[0])
@@ -399,7 +402,7 @@ class HeatmapView(QGraphicsView):
                         if (start >= (xAxisStart*binSize + i*(binSize*zoomFactor)) and start < (xAxisStart*binSize + i*binSize*zoomFactor + binSize*zoomFactor) and end >= (yAxisStart*binSize + j*binSize*zoomFactor) and end < (yAxisStart*binSize + j*binSize*zoomFactor + binSize*zoomFactor)):
                             counter = counter + 1
                             B[i][j] = counter
-                            
+
                     elif (variant[5]["SVTYPE"]==mapping and variant[9]):
                         start = int(variant[1])
                         end = int(variant[3])
@@ -421,7 +424,7 @@ class HeatmapView(QGraphicsView):
         self.update()
 
     def wheelEvent(self,event):
-    
+
         if event.modifiers() == Qt.ControlModifier and event.delta() > 0:
             self.scale(0.9,0.9)
         elif event.modifiers() == Qt.ControlModifier and event.delta() < 0:
