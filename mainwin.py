@@ -619,6 +619,7 @@ class SciVisView(QMainWindow):
             stainItem.setSelectable(False)
             stainItems.append(stainItem)
             colorItem = QStandardItem()
+            colorItem.setSizeHint(QSize(40,40))
             colorItem.setBackground(self.stainColors[stainName])
             colorItem.setEditable(False)
             colorItem.setSelectable(False)
@@ -637,6 +638,7 @@ class SciVisView(QMainWindow):
     def heatColor(self):
         color = QColorDialog.getColor(self.stainColors["heatmapColor"])
         self.stainColors["heatmapColor"] = color
+        self.colorModel.item(0,1).setBackground(color)
         self.updateSettings()
 
     def viewSettings(self):
@@ -664,6 +666,7 @@ class SciVisView(QMainWindow):
         colorList.horizontalHeader().hide()
         colorList.verticalHeader().hide()
         colorList.setModel(self.colorModel)
+        colorList.resizeColumnsToContents()
         colorList.doubleClicked.connect(self.pickColor)
         colorLayout.addWidget(colorList,0,0)
         colorPage.setLayout(colorLayout)
@@ -688,7 +691,7 @@ class SciVisView(QMainWindow):
         resetSettingsButton = QPushButton('Reset settings to default', settingsDia)
         resetSettingsButton.clicked.connect(self.resetSettings)
         settingsLayout.addWidget(stackList,0,0)
-        settingsLayout.addWidget(settingsStack,0,1)
+        settingsLayout.addWidget(settingsStack,0,1,1,4)
         settingsLayout.addWidget(okButton,1,0,1,1)
         settingsLayout.addWidget(applyButton,1,1,1,1)
         settingsLayout.addWidget(saveSettingsButton,1,2,1,1)
