@@ -62,7 +62,8 @@ class KaryogramView(QGraphicsView):
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:
-                self.itemsPerRow = item.data(0)
+                self.itemsPerRow = int(item.data(0))
+        self.karyoSettings["itemsPerRow"] = str(self.itemsPerRow)
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
@@ -79,6 +80,9 @@ class KaryogramView(QGraphicsView):
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
 
+    def returnSettingsDict(self):
+        return self.karyoSettings
+
     #Updates display toggles according to this scene's active chModel
     def updateToggles(self):
         for row in range(self.chModel.rowCount()):
@@ -92,7 +96,6 @@ class KaryogramView(QGraphicsView):
                 self.chromosomes[row].display_connections = True
             else:
                 self.chromosomes[row].display_connections = False
-        
         self.updateItems()
 
     #Creates data model for info window
@@ -205,7 +208,7 @@ class KaryogramView(QGraphicsView):
         chromoWidget = QWidget()
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
-        
+
     def setActiveChromosome(self,chromoNumber,varTable):
         self.varTable = varTable
         self.activeChromo = self.chromosomes[chromoNumber]
@@ -294,7 +297,7 @@ class KaryogramView(QGraphicsView):
     def drawConnections(self):
         self.connectionGraphicItems = []
         selectedVariants = []
-        
+
         placeLeft = True
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         for chrA in self.chromosomes:
@@ -316,15 +319,15 @@ class KaryogramView(QGraphicsView):
                 else:
                     chrB = self.chromosomes[int(connection[1])-1]
                 if not chrB.display or connection[4] is None:
-                    continue 
-                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first    
+                    continue
+                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
                 if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
                     connEndPos = int(connection[2].split(',')[1])
                     connStartPos = int(connection[3].split(',')[1])
                 else:
                     connEndPos = int(connection[3].split(',')[1])
                     connStartPos = int(connection[2].split(',')[1])
-                    
+
                 #The cytobands which the connections will go between
                 #look for the cytoband on chrA, data(2) is the start pos for the cytoband and data(3) is the end pos
                 for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
@@ -333,14 +336,14 @@ class KaryogramView(QGraphicsView):
                 #look for the cytoband on chrB
                 for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
                     if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
-                        cbandB = cytoItem.data(0)  
+                        cbandB = cytoItem.data(0)
                 #do not show small variants within one cytoband
                 if cbandA == cbandB:
                     continue
                 #do not show connections to bands that does not exist in the dictionary
                 if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
                     continue
-                if chrA.name == chrB.name:    
+                if chrA.name == chrB.name:
                     if placeLeft:
                         xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
                         xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
@@ -349,9 +352,9 @@ class KaryogramView(QGraphicsView):
                         xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
                 else:
                     xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                    xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()    
+                    xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
                 #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
-                cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]                
+                cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]
                 cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
                 yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
                 yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
@@ -373,13 +376,13 @@ class KaryogramView(QGraphicsView):
                     connectionPath.quadTo(pointC, pointB)
                 else:
                     connectionPath.lineTo(pointB)
-                    
+
                 connectionItem = QGraphicsPathItem(connectionPath)
                 pen = QPen()
                 pen.setBrush(Qt.darkCyan)
                 pen.setWidth(2)
                 connectionItem.setZValue(2)
-                if self.activeChromo and self.varTable:        
+                if self.activeChromo and self.varTable:
                     selectedChromo = self.activeChromo
                     selectedVariants = common.returnVariants(selectedChromo,self.varTable)
                     for variant in selectedVariants:
@@ -555,7 +558,7 @@ class KaryogramView(QGraphicsView):
                             endWinA = int(variant[5]["WINB"].split(',')[1])
                             startWinB = int(variant[5]["WINA"].split(',')[0])
                             endWinB = int(variant[5]["WINA"].split(',')[1])
-                    else: 
+                    else:
                             startWinA = int(variant[5]["WINA"].split(',')[0])
                             endWinA = int(variant[5]["WINA"].split(',')[1])
                             startWinB = int(variant[5]["WINB"].split(',')[0])
@@ -574,7 +577,7 @@ class KaryogramView(QGraphicsView):
                     elif variant[4] == "DUP":
                         markRectItemA.setBrush(QBrush(Qt.green))
                         markRectItemB.setBrush(QBrush(Qt.green))
-                    else:   
+                    else:
                         markRectItemA.setBrush(QBrush(Qt.blue))
                         markRectItemB.setBrush(QBrush(Qt.blue))
                     markRectItemA.setBrush(QBrush(Qt.blue))
@@ -589,7 +592,7 @@ class KaryogramView(QGraphicsView):
                     self.variantMarkItems.append(markRectItemB)
 
                 else:
-                    
+
                     startPos = variant[1]
                     endPos = variant[3]
                     variantLength = endPos-startPos
@@ -600,14 +603,14 @@ class KaryogramView(QGraphicsView):
                         markRectItem.setBrush(QBrush(Qt.red))
                     elif variant[4] == "DUP":
                         markRectItem.setBrush(QBrush(Qt.green))
-                    else:   
+                    else:
                         markRectItem.setBrush(QBrush(Qt.blue))
                     markRectItem.setOpacity(0.5)
                     self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
                     self.scene.addItem(markRectItem)
                     self.variantMarkItems.append(markRectItem)
-                    
-          
+
+
     def updateItems(self):
         #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user

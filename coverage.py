@@ -137,17 +137,22 @@ class CoverageView(QWidget):
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:
-                self.bpWindow = item.data(0)
+                self.bpWindow = int(item.data(0))
             if row == 1:
                 self.dupLimit = item.data(0)
             if row == 2:
                 self.delLimit = item.data(0)
             if row == 3:
-                self.minCoverage = item.data(0)/100
+                self.minCoverage = int(item.data(0))/100
             if row == 4:
-                self.maxCoverage = item.data(0)/100
+                self.maxCoverage = int(item.data(0))/100
             if row == 5:
                 self.minBedBp = item.data(0)
+        self.coverageSettings["bpWindow"] = str(self.bpWindow)
+        self.coverageSettings["minCoverage"] = str(self.minCoverage*100)
+        self.coverageSettings["maxCoverage"] = str(self.maxCoverage*100)
+        self.coverageSettings["dupLimit"] = str(self.dupLimit)
+        self.coverageSettings["delLimit"] = str(self.delLimit)
         self.updatePlot()
 
     #Creates and returns a widget with this view's settings
@@ -164,6 +169,9 @@ class CoverageView(QWidget):
         settingsLayout.addWidget(settingsList,0,0,1,3)
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
+
+    def returnSettingsDict(self):
+        return self.coverageSettings
 
     #Creates data model for info window
     def createChInfo(self):
@@ -580,7 +588,7 @@ class CoverageView(QWidget):
         chrA = self.chromosomes[self.activeChromo]
         variants = common.returnVariants(chrA,self.varTable)
         for variant in variants:
-                
+
             if not variant[9] or variant[2].startswith("G"):
                 continue
             if "WINA" in variant[5]:
@@ -590,7 +598,7 @@ class CoverageView(QWidget):
                         endWinA = int(variant[5]["WINB"].split(',')[1])
                         startWinB = int(variant[5]["WINA"].split(',')[0])
                         endWinB = int(variant[5]["WINA"].split(',')[1])
-                else: 
+                else:
                         startWinA = int(variant[5]["WINA"].split(',')[0])
                         endWinA = int(variant[5]["WINA"].split(',')[1])
                         startWinB = int(variant[5]["WINB"].split(',')[0])
@@ -616,7 +624,7 @@ class CoverageView(QWidget):
                     self.mainScene.addItem(regionGraphicB)
 
             else:
-                
+
                 bpStart = variant[1]
                 bpEnd = variant[3]
                 if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
@@ -636,8 +644,7 @@ class CoverageView(QWidget):
         excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
         "tab files (*.tab)")[0]
         if excludeFile:
-            reader = data.Reader()
-            excludeLines = reader.readGeneralTab(excludeFile)
+            excludeLines = data.readGeneralTab(excludeFile)
             #Read each line and look for positions markd with (-1)
             #Create a dict and for each chromosome, create a list with excluded positions
             for line in excludeLines:
@@ -653,8 +660,7 @@ class CoverageView(QWidget):
         excludeFile = QFileDialog.getOpenFileName(None,"Specify exclude file",QDir.currentPath(),
         "exclude files (*.tab *.txt)")[0]
         if excludeFile:
-            reader = data.Reader()
-            excludeLines = reader.readGeneralTab(excludeFile)
+            excludeLines = data.readGeneralTab(excludeFile)
             #Create a dict and for each chromosome, create a list with excluded positions
             for line in excludeLines:
                 #Formatted as chr, start, end
