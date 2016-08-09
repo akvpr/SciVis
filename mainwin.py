@@ -33,7 +33,10 @@ class SciVisView(QMainWindow):
         self.saveIcon = QIcon("icons/save.png")
         self.settingsIcon = QIcon("icons/settings.png")
         #Load config file
-        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig) = data.readConfig("userSettings.conf")
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("userSettings.conf")
+        self.colorNames = self.colors.keys()
+        for name in self.colorNames:
+            self.colors[name] = QColor(self.colors[name])
         #Create actions for menus and toolbars, connect to functions
         newCircAct = QAction('New circular diagram',self)
         newCircAct.triggered.connect(self.newCirc)
@@ -606,39 +609,35 @@ class SciVisView(QMainWindow):
             self.show()
 
     def createColorModel(self):
-        #Model allowing stain colors to be changed globally
-        self.stainNames = ['heatmapColor', 'acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
-        self.stainColors = {'heatmapColor':Qt.darkRed, 'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
-        'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
+        #Model allowing colors to be changed globally
         self.colorModel = QStandardItemModel()
-        stainItems = []
+        nameItems = []
         colorItems = []
-        for stainName in self.stainNames:
-            stainItem = QStandardItem(stainName)
-            stainItem.setEditable(False)
-            stainItem.setSelectable(False)
-            stainItems.append(stainItem)
+        for colorName in sorted(self.colors.keys()):
+            nameItem = QStandardItem(colorName)
+            nameItem.setEditable(False)
+            nameItem.setSelectable(False)
+            nameItems.append(nameItem)
             colorItem = QStandardItem()
             colorItem.setSizeHint(QSize(40,40))
-            colorItem.setBackground(self.stainColors[stainName])
+            colorItem.setBackground(QColor(self.colors[colorName]))
             colorItem.setEditable(False)
             colorItem.setSelectable(False)
             colorItems.append(colorItem)
-        self.colorModel.appendColumn(stainItems)
+        self.colorModel.appendColumn(nameItems)
         self.colorModel.appendColumn(colorItems)
 
     def pickColor(self,modelIndex):
         selectedRow = modelIndex.row()
-        stainItem = self.colorModel.item(selectedRow,0)
+        nameItem = self.colorModel.item(selectedRow,0)
         colorItem = self.colorModel.item(selectedRow,1)
         chosenColor = QColorDialog.getColor(colorItem.background().color())
-        self.stainColors[stainItem.text()] = chosenColor
+        self.colors[nameItem.text()] = chosenColor
         colorItem.setBackground(chosenColor)
 
     def heatColor(self):
-        color = QColorDialog.getColor(self.stainColors["heatmapColor"])
-        self.stainColors["heatmapColor"] = color
-        self.colorModel.item(0,1).setBackground(color)
+        color = QColorDialog.getColor(self.colors["heatmapColor"])
+        self.colors["heatmapColor"] = color
         self.updateSettings()
 
     def viewSettings(self):

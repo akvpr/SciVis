@@ -20,9 +20,9 @@ class HeatmapView(QGraphicsView):
         self.bpWindow = 50
         self.minCoverage = 0
         self.maxCoverage = 5
-        self.stainColors = parent.stainColors
+        self.colors = parent.colors
         self.activeIndex = 0
-        self.color = QColor(self.stainColors['heatmapColor'])
+        self.color = QColor(self.colors['heatmapColor'])
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.hide()
         self.origin = QPoint(0,0)
@@ -90,7 +90,7 @@ class HeatmapView(QGraphicsView):
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
-        self.color = QColor(self.stainColors['heatmapColor'])
+        self.color = QColor(self.colors['heatmapColor'])
         self.clearScene()
         self.updateHeatmap(self.activeIndex)
 

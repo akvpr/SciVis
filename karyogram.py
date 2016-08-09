@@ -15,8 +15,8 @@ class KaryogramView(QGraphicsView):
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
-        self.stainNames = parent.stainNames
-        self.stainColors = parent.stainColors
+        self.colorNames = parent.colorNames
+        self.colors = parent.colors
         self.numDispChromos = 24
         self.itemsPerRow = int(self.karyoSettings["itemsPerRow"])
         self.cytoGraphicItems = {}
@@ -57,7 +57,7 @@ class KaryogramView(QGraphicsView):
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
-        #self.stainColors = self.stainColors
+        #self.colors = self.colors
         self.updateItems()
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
@@ -494,7 +494,7 @@ class KaryogramView(QGraphicsView):
                             #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                             bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                             rounded = "none"
-                        bandRectItem.setBrush(self.stainColors[cyto[4]])
+                        bandRectItem.setBrush(self.colors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
                         bandRectItem.setData(2, cytoStart)
@@ -631,19 +631,8 @@ class KaryogramView(QGraphicsView):
         #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user
         for graphicItem in self.cytoGraphicItems.values():
-            self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
             try:
-                self.scene.removeItem(graphicItem)
-            except:
-                pass
-        for connItem in self.connectionGraphicItems:
-            try:
-                self.scene.removeItem(connItem)
-            except:
-                pass
-        for markItem in self.variantMarkItems:
-            try:
-                self.scene.removeItem(markItem)
+                self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
             except:
                 pass
         self.scene.clear()

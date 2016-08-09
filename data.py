@@ -159,9 +159,12 @@ def readConfig(toRead):
     coverageConfig = {}
     karyoConfig = {}
     heatmapConfig = {}
+    colorConfig = {}
     with open(toRead, 'r') as config:
         activeSection = "CIRCULAR"
         for line in config:
+            if line.startswith('#'):
+                continue
             if line.startswith('['):
                 if line.startswith('[CIRCULAR]'):
                     activeSection = 'CIRCULAR'
@@ -171,6 +174,8 @@ def readConfig(toRead):
                     activeSection = 'KARYOGRAM'
                 elif line.startswith('[HEATMAP]'):
                     activeSection = 'HEATMAP'
+                elif line.startswith('[COLORS]'):
+                    activeSection = 'COLORS'
             else:
                 if activeSection == "CIRCULAR":
                     fields = line.split('=')
@@ -184,7 +189,11 @@ def readConfig(toRead):
                 elif activeSection == "HEATMAP":
                     fields = line.split('=')
                     heatmapConfig[fields[0]] = fields[1].strip('\n')
-    return (circularConfig,coverageConfig,karyoConfig,heatmapConfig)
+                elif activeSection == 'COLORS':
+                    fields = line.split('=')
+                    fields[1] = fields[1]
+                    colorConfig[fields[0]] = fields[1].strip('\n')
+    return (circularConfig,coverageConfig,karyoConfig,heatmapConfig,colorConfig)
 
 def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig):
 
@@ -217,7 +226,6 @@ def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig)
                     line = line.replace(fields[1],heatmapConfig[fields[0]])
             line = line.strip('\n')
             newData.append(line)
-
         config.seek(0)
         config.truncate()
         for line in newData:

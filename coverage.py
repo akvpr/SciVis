@@ -29,8 +29,8 @@ class CoverageView(QWidget):
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
-        self.stainNames = parent.stainNames
-        self.stainColors = parent.stainColors
+        self.colorNames = parent.colorNames
+        self.colors = parent.colors
         self.bpWindow = int(self.coverageSettings["bpWindow"])
         self.minCoverage = float(self.coverageSettings["minCoverage"])/100
         self.maxCoverage = float(self.coverageSettings["maxCoverage"])/100
@@ -327,7 +327,7 @@ class CoverageView(QWidget):
                 else:
                     #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                     bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
-                bandRectItem.setBrush(self.stainColors[cyto[4]])
+                bandRectItem.setBrush(self.colors[cyto[4]])
                 bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                 self.overviewScene.addItem(bandRectItem)
                 #Add the chromosome name to the left of the area
