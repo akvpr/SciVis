@@ -32,12 +32,12 @@ class CoverageView(QWidget):
         self.stainNames = parent.stainNames
         self.stainColors = parent.stainColors
         self.bpWindow = int(self.coverageSettings["bpWindow"])
-        self.minCoverage = int(self.coverageSettings["minCoverage"])/100
-        self.maxCoverage = int(self.coverageSettings["maxCoverage"])/100
+        self.minCoverage = float(self.coverageSettings["minCoverage"])/100
+        self.maxCoverage = float(self.coverageSettings["maxCoverage"])/100
         self.dupLimit = float(self.coverageSettings["dupLimit"])
         self.delLimit = float(self.coverageSettings["delLimit"])
+        self.minBedBp = int(self.coverageSettings["minBedBp"])
         self.plotType = 0
-        self.minBedBp = 500
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
@@ -143,9 +143,9 @@ class CoverageView(QWidget):
             if row == 2:
                 self.delLimit = item.data(0)
             if row == 3:
-                self.minCoverage = int(item.data(0))/100
+                self.minCoverage = float(item.data(0))/100
             if row == 4:
-                self.maxCoverage = int(item.data(0))/100
+                self.maxCoverage = float(item.data(0))/100
             if row == 5:
                 self.minBedBp = item.data(0)
         self.coverageSettings["bpWindow"] = str(self.bpWindow)
@@ -153,6 +153,7 @@ class CoverageView(QWidget):
         self.coverageSettings["maxCoverage"] = str(self.maxCoverage*100)
         self.coverageSettings["dupLimit"] = str(self.dupLimit)
         self.coverageSettings["delLimit"] = str(self.delLimit)
+        self.coverageSettings["minBedBp"] = str(self.minBedBp)
         self.updatePlot()
 
     #Creates and returns a widget with this view's settings

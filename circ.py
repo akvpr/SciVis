@@ -25,16 +25,16 @@ class CircView(QGraphicsView):
         self.coverageItems = []
         self.connectionItems = {}
 
+        self.startColor = QColor.fromRgb(243,241,172)
         self.bpWindow = int(self.circularSettings["bpWindow"])
         self.bpDistanceResolution = int(self.circularSettings["bpDistanceResolution"])
         self.useCoverageLog = self.circularSettings["useCoverageLog"] == "True"
         self.minCoverage = float(self.circularSettings["minCoverage"])/100
         self.maxCoverage = float(self.circularSettings["maxCoverage"])/100
-        self.startColor = QColor.fromRgb(243,241,172)
         self.connWidth = int(self.circularSettings["connWidth"])
         self.showChrNames = self.circularSettings["showChrNames"] == "True"
         self.showCentromereRegion = self.circularSettings["showCentromereRegion"] == "True"
-        self.minBedBp = 500
+        self.minBedBp = int(self.circularSettings["minBedBp"])
         self.createSettings()
 
         self.coverageNormLog = self.dataDict['coverageNormLog']
@@ -186,6 +186,7 @@ class CircView(QGraphicsView):
         self.circularSettings["connWidth"] = str(self.connWidth)
         self.circularSettings["showChrNames"] = str(self.showChrNames)
         self.circularSettings["showCentromereRegion"] = str(self.showCentromereRegion)
+        self.circularSettings["minBedBp"] = str(self.minBedBp)
         self.initscene()
 
     #Creates and returns a widget with this view's settings
