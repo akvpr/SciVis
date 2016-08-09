@@ -69,13 +69,16 @@ class KaryogramView(QGraphicsView):
         settingsWidget = QWidget()
         settingsLayout = QGridLayout()
         settingsList = QTableView()
+        #settingsList.setColumnWidth(0,700)
+        #settingsList.setColumnWidth(1,100)
         settingsList.setEditTriggers(QAbstractItemView.AllEditTriggers)
         settingsList.setShowGrid(False)
         settingsList.horizontalHeader().hide()
         settingsList.verticalHeader().hide()
         settingsList.setModel(self.settingsModel)
         settingsList.setTextElideMode(Qt.ElideNone)
-        settingsLayout.addWidget(settingsList,0,0,1,3)
+        settingsList.resizeColumnsToContents()
+        settingsLayout.addWidget(settingsList,0,0,1,5)
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
 
@@ -525,15 +528,17 @@ class KaryogramView(QGraphicsView):
 
     def markVariants(self):
         self.variantMarkItems = []
-        if self.activeChromo and self.varTable:
+        if self.activeChromo and self.varTable and self.activeChromo.display:
             chrA = self.activeChromo
             variants = common.returnVariants(chrA,self.varTable)
             chrAHeight = 0
             xPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
-            yPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).top()
+            yPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).bottom()
             for band in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
                 chrAHeight += band.mapRectToScene(band.boundingRect()).height()
                 xPosA = band.mapRectToScene(band.boundingRect()).left()
+                if band.mapRectToScene(band.boundingRect()).top() < yPosA:
+                            yPosA = band.mapRectToScene(band.boundingRect()).top()
             chrAWidth = self.chromoWidth+1
             chrALength = int(chrA.end)
             for variant in variants:
@@ -541,13 +546,17 @@ class KaryogramView(QGraphicsView):
                 if not variant[9] or variant[2].startswith("G"):
                     continue
                 if "WINA" in variant[5]:
+                    if not self.chromosomeDict[variant[2]].display:
+                        continue
                     chrB = self.chromosomeDict[variant[2]]
                     chrBHeight = 0
                     xPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).left()
-                    yPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).top()
+                    yPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).bottom()
                     for band in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
                         chrBHeight += band.mapRectToScene(band.boundingRect()).height()
                         xPosB = band.mapRectToScene(band.boundingRect()).left()
+                        if band.mapRectToScene(band.boundingRect()).top() < yPosB:
+                            yPosB = band.mapRectToScene(band.boundingRect()).top()
                     chrBWidth = self.chromoWidth+1
                     chrBLength = int(chrB.end)
                     if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
@@ -571,14 +580,18 @@ class KaryogramView(QGraphicsView):
                     if variant[4] == "DEL":
                         markRectItemA.setBrush(QBrush(Qt.red))
                         markRectItemB.setBrush(QBrush(Qt.red))
+                        markRectItemA.setPen(QPen(QBrush(Qt.red),1))
+                        markRectItemB.setPen(QPen(QBrush(Qt.red),1))
                     elif variant[4] == "DUP":
                         markRectItemA.setBrush(QBrush(Qt.green))
                         markRectItemB.setBrush(QBrush(Qt.green))
+                        markRectItemA.setPen(QPen(QBrush(Qt.green),1))
+                        markRectItemB.setPen(QPen(QBrush(Qt.green),1))
                     else:   
                         markRectItemA.setBrush(QBrush(Qt.blue))
                         markRectItemB.setBrush(QBrush(Qt.blue))
-                    markRectItemA.setBrush(QBrush(Qt.blue))
-                    markRectItemB.setBrush(QBrush(Qt.blue))
+                        markRectItemA.setPen(QPen(QBrush(Qt.blue),1))
+                        markRectItemB.setPen(QPen(QBrush(Qt.blue),1))
                     markRectItemA.setOpacity(0.5)
                     markRectItemB.setOpacity(0.5)
                     self.cytoGraphicItems[chrA.name].addToGroup(markRectItemA)
@@ -598,10 +611,13 @@ class KaryogramView(QGraphicsView):
                     markRectItem = QGraphicsRectItem(markRect)
                     if variant[4] == "DEL":
                         markRectItem.setBrush(QBrush(Qt.red))
+                        markRectItem.setPen(QPen(QBrush(Qt.red),1))
                     elif variant[4] == "DUP":
                         markRectItem.setBrush(QBrush(Qt.green))
+                        markRectItem.setPen(QPen(QBrush(Qt.green),1))
                     else:   
                         markRectItem.setBrush(QBrush(Qt.blue))
+                        markRectItem.setPen(QPen(QBrush(Qt.blue),1))
                     markRectItem.setOpacity(0.5)
                     self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
                     self.scene.addItem(markRectItem)

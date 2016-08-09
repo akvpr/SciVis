@@ -190,6 +190,7 @@ class CircView(QGraphicsView):
         settingsList.horizontalHeader().hide()
         settingsList.verticalHeader().hide()
         settingsList.setModel(self.settingsModel)
+        settingsList.resizeColumnsToContents()
         settingsList.setTextElideMode(Qt.ElideNone)
         settingsLayout.addWidget(settingsList,0,0,1,3)
         settingsWidget.setLayout(settingsLayout)
