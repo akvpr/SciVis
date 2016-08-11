@@ -29,7 +29,6 @@ class KaryogramView(QGraphicsView):
         self.show()
         self.createSettings()
         self.createChInfo()
-        #self.updateItems()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -184,7 +183,7 @@ class KaryogramView(QGraphicsView):
         togButton.setToolTip("Toggle display of chromosome")
         #Button for viewing selected chromosome selectedVariants
         viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
-        viewVarButton.clicked.connect(self.viewselectedVariants)
+        viewVarButton.clicked.connect(self.viewVariants)
         viewVarButton.setToolTip("View selectedVariants in chromosome")
         #Button for adding selectedVariants
         #addVariantButton = QPushButton(QIcon("icons/new.png"),"")
@@ -215,7 +214,7 @@ class KaryogramView(QGraphicsView):
         self.updateItems()
 
     #Creates a popup containing variant info in a table.
-    def viewselectedVariants(self):
+    def viewVariants(self):
         #Find which chromosome's selectedVariants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
@@ -296,114 +295,86 @@ class KaryogramView(QGraphicsView):
 
     def drawConnections(self):
         self.connectionGraphicItems = []
-        selectedselectedVariants = []
-        
+        selectedVariants = []
+        if self.activeChromo and self.varTable:
+            selectedVariants = common.returnVariants(self.activeChromo,self.varTable)    
         placeLeft = True
-        print(0)
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         for chrA in self.chromosomes:
-            if not (chrA.display_connections and chrA.display):
+            if not chrA.display:
                 continue
-            print(1)
-            #only create the connection list if it has not been initialized earlier
-            if not chrA.connections:
-                chrA.createConnections()
-            for connection in chrA.connections:
-                print(2)
-                #The information is stored as string elements and needs to be converted to integers
-                if connection[1] == 'X':
-                    chrBIndex=22
-                    chrB = self.chromosomes[chrBIndex]
-                elif connection[1] == 'Y':
-                    chrBIndex=23
-                    chrB = self.chromosomes[chrBIndex]
-                elif (connection[1].startswith('G') or connection[1].startswith('M')):
-                    continue
-                else:
-                    chrB = self.chromosomes[int(connection[1])-1]
-                print(3)
-                if not chrB.display or connection[4] is None:
-                    continue 
-                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first  
-                print(4)
-                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                    connEndPos = int(connection[2].split(',')[1])
-                    connStartPos = int(connection[3].split(',')[1])
-                else:
-                    connEndPos = int(connection[3].split(',')[1])
-                    connStartPos = int(connection[2].split(',')[1])
-                print(5)
-                #The cytobands which the connections will go between
-                #look for the cytoband on chrA, data(2) is the start pos for the cytoband and data(3) is the end pos
-                for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
-                    if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
-                            cbandA = cytoItem.data(0)
-                #look for the cytoband on chrB
-                for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
-                    if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
-                        cbandB = cytoItem.data(0)  
-                #do not show small selectedVariants within one cytoband
-                if cbandA == cbandB:
-                    continue
-                #do not show connections to bands that does not exist in the dictionary
-                if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
-                    continue
-                print(6)
-                if chrA.name == chrB.name:    
-                    if placeLeft:
-                        xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
-                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+            for variant in chrA.variants:
+                chrB = self.chromosomeDict[variant[2]]
+                if variant[9] and not variant[2].startswith("G") and (chrA.display_connections or variant in selectedVariants or variant[11]):
+                    if not self.chromosomeDict[variant[2]].display:
+                        continue
+                    #If chrA higher in order than chrB, WINA and WINB are switched, so check this first  
+                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                        connEndPos = int(variant[5]["WINA"].split(',')[1])
+                        connStartPos = int(variant[5]["WINB"].split(',')[1])
+                    else:
+                        connEndPos = int(variant[5]["WINB"].split(',')[1])
+                        connStartPos = int(variant[5]["WINA"].split(',')[1])
+                    #The cytobands which the connections will go between
+                    #look for the cytoband on chrA, data(2) is the start pos for the cytoband and data(3) is the end pos
+                    for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
+                        if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
+                                cbandA = cytoItem.data(0)
+                    #look for the cytoband on chrB
+                    for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
+                        if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
+                            cbandB = cytoItem.data(0)  
+                    #do not show small variants within one cytoband
+                    if cbandA == cbandB:
+                        continue
+                    #do not show connections to bands that does not exist in the dictionary
+                    if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
+                        continue
+                    #if we have an intrachromosomal variant, alternate placing the connection on the left or right side
+                    if chrA.name == chrB.name:    
+                        if placeLeft:
+                            xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
+                            xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+                        else:
+                            xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
+                            xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
                     else:
                         xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
-                else:
-                    xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                    xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left() 
-                print(7)
-                #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
-                cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]                
-                cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
-                yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
-                yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
-                #If the item has been moved, x and y are how much the item has been moved by; update position with these
-                xPosA += self.cytoGraphicItems[chrA.name].x()
-                xPosB += self.cytoGraphicItems[chrB.name].x()
-                yPosA += self.cytoGraphicItems[chrA.name].y()
-                yPosB += self.cytoGraphicItems[chrB.name].y()
-                pointA = QPoint(xPosA, yPosA)
-                pointB = QPoint(xPosB, yPosB)
-                connectionPath = QPainterPath()
-                connectionPath.moveTo(pointA)
-                if chrA.name == chrB.name:
-                    if placeLeft:
-                        pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
-                    else:
-                        pointC = QPoint(xPosA+80, (yPosA+yPosB)/2)
-                    placeLeft = not placeLeft
-                    connectionPath.quadTo(pointC, pointB)
-                else:
-                    connectionPath.lineTo(pointB)
-                print(9)
-                connectionItem = QGraphicsPathItem(connectionPath)
-                pen = QPen()
-                pen.setBrush(Qt.darkCyan)
-                pen.setWidth(2)
-                connectionItem.setZValue(2)
-                if self.activeChromo and self.varTable:        
-                    selectedChromo = self.activeChromo
-                    selectedselectedVariants = common.returnselectedVariants(selectedChromo,self.varTable)
-                    for variant in selectedselectedVariants:
-                        if variant[0] is not variant[2]:
-                            variantConnection = [variant[0],variant[2],variant[5]["WINA"],variant[5]["WINB"],variant[8]]
+                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left() 
+                    #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
+                    cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]                
+                    cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
+                    yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
+                    yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
+                    #If the item has been moved, x and y are how much the item has been moved by; update position with these
+                    xPosA += self.cytoGraphicItems[chrA.name].x()
+                    xPosB += self.cytoGraphicItems[chrB.name].x()
+                    yPosA += self.cytoGraphicItems[chrA.name].y()
+                    yPosB += self.cytoGraphicItems[chrB.name].y()
+                    pointA = QPoint(xPosA, yPosA)
+                    pointB = QPoint(xPosB, yPosB)
+                    connectionPath = QPainterPath()
+                    connectionPath.moveTo(pointA)
+                    if chrA.name == chrB.name:
+                        if placeLeft:
+                            pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
                         else:
-                            variantConnection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), variant[8]]
-                        if variantConnection == connection:
-                            pen.setBrush(Qt.red)
-                            connectionItem.setZValue(3)
-                connectionItem.setPen(pen)
-                print(8)
-                self.scene.addItem(connectionItem)
-                self.connectionGraphicItems.append(connectionItem)
+                            pointC = QPoint(xPosA+80, (yPosA+yPosB)/2)
+                        placeLeft = not placeLeft
+                        connectionPath.quadTo(pointC, pointB)
+                    else:
+                        connectionPath.lineTo(pointB)
+                    connectionItem = QGraphicsPathItem(connectionPath)
+                    pen = QPen()
+                    pen.setBrush(Qt.darkCyan)
+                    pen.setWidth(2)
+                    connectionItem.setZValue(2)
+                    if variant[11] or variant in selectedVariants:
+                        pen.setBrush(Qt.red)
+                        connectionItem.setZValue(3)
+                    connectionItem.setPen(pen)
+                    self.scene.addItem(connectionItem)
+                    self.connectionGraphicItems.append(connectionItem)
 
     #Create chromosome items consisting of cytobands, names of bands, and chromosome names
     def createChromosomeItems(self):
@@ -534,14 +505,15 @@ class KaryogramView(QGraphicsView):
                     displaceY += longestItemInRow + 30
                     longestItemInRow = 0
 
-    def markselectedVariants(self):
+    def markVariants(self):
         self.variantMarkItems = []
         selectedVariants = []
         for chrA in self.chromosomes:
-            if not chrA.display or "GL" in chrA.name or "MT" in chrA.name:
+            if not chrA.display:
                 continue
+                
             if self.activeChromo and self.varTable and self.activeChromo.display:
-                selectedVariants = common.returnselectedVariants(self.activeChromo,self.varTable)
+                selectedVariants = common.returnVariants(self.activeChromo,self.varTable)
             chrAHeight = 0
             xPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
             yPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).bottom()
@@ -552,9 +524,8 @@ class KaryogramView(QGraphicsView):
                             yPosA = band.mapRectToScene(band.boundingRect()).top()
             chrAWidth = self.chromoWidth+1
             chrALength = int(chrA.end)
-            for variant in selectedVariants:
-                print(variant)
             for variant in chrA.variants:
+                #only create marks if the variant is active, and not a GLXXXXX and if either it is selected or marked
                 if variant[9] and not variant[2].startswith("G") and (variant in selectedVariants or variant[11]):
                     if "WINA" in variant[5]:
                         if not self.chromosomeDict[variant[2]].display:
@@ -607,13 +578,16 @@ class KaryogramView(QGraphicsView):
                         markRectItemB.setOpacity(0.5)
                         self.cytoGraphicItems[chrA.name].addToGroup(markRectItemA)
                         self.cytoGraphicItems[chrB.name].addToGroup(markRectItemB)
-                        self.scene.addItem(markRectItemA)
-                        self.scene.addItem(markRectItemB)
+                        if startWinA == startWinB:
+                            self.scene.addItem(markRectItemA)
+                        else:
+                            self.scene.addItem(markRectItemA)
+                            self.scene.addItem(markRectItemB)
                         self.variantMarkItems.append(markRectItemA)
                         self.variantMarkItems.append(markRectItemB)
 
                     else:
-                        
+                            
                         startPos = variant[1]
                         endPos = variant[3]
                         variantLength = endPos-startPos
@@ -646,16 +620,12 @@ class KaryogramView(QGraphicsView):
                 pass
         self.scene.clear()
         self.createChromosomeItems()
+        self.markVariants()
+        self.drawConnections()
         #Move back the items to their old positions
         for graphicItem in self.cytoGraphicItems.values():
             if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
                 graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
-        try:
-            print("tja")
-            self.drawConnections()
-            self.markselectedVariants()
-        except:
-            pass
         self.update()
 
     #Rearranges the graphic items to their default position
