@@ -7,7 +7,6 @@ import data
 class CoverageView(QWidget):
 
     def __init__(self,dataDict,coverageSettings, parent):
-        #Also DragMode scrollHand if in graphArea?
         self.layout = QVBoxLayout()
         self.splitter = QSplitter(parent)
         self.splitter.setOrientation(Qt.Vertical)
@@ -59,6 +58,8 @@ class CoverageView(QWidget):
         self.layout.setStretch(1,1)
         self.setLayout(self.layout)
         self.firstStart = True
+        self.startBox = None
+        self.endBox = None
 
     def startScene(self):
         if self.firstStart:
@@ -474,8 +475,12 @@ class CoverageView(QWidget):
         bedSceneRect = self.bedScene.sceneRect()
         self.trackViewArea.setHeight(bedSceneRect.height()+20)
         self.bedView.setSceneRect(self.trackViewArea)
-        self.overviewView.setSceneRect(self.overviewArea)
         self.mainView.setSceneRect(self.fitArea)
+        overviewRect = self.overviewArea.toRect()
+        #Add some margin for the overview item's scene
+        overviewRect.setLeft(self.overviewArea.left()-30)
+        overviewRect.setRight(self.overviewArea.right()+30)
+        self.overviewView.setSceneRect(overviewRect)
         #If this chromosome has any bed tracks, add these
         if self.bedDict[chromo.name]:
             self.addTracks(chromo)
@@ -495,7 +500,7 @@ class CoverageView(QWidget):
         self.fitArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
         offsetPoint = QPointF(50,50)
         self.graphArea = QRectF(QPointF(self.centerArea.topLeft()+offsetPoint), QPointF(self.centerArea.bottomRight()-offsetPoint))
-        self.overviewArea = QRect(self.graphArea.left(),0,self.graphArea.width(),30)
+        self.overviewArea = QRectF(self.graphArea.left(),0,self.graphArea.width(),30)
         self.trackArea = QRectF(self.graphArea.left(),0,self.graphArea.width(),50)
         self.trackViewArea = QRectF(self.centerArea.left(),0,self.centerArea.width(),50)
 
@@ -515,6 +520,36 @@ class CoverageView(QWidget):
             regionLength = int(chromo.end)
         limits = [regionStart, regionLength]
         self.limits = limits
+        if self.startBox and self.endBox:
+            self.updatePositionBoxes()
+
+    def connectPositionBoxes(self,startBox,endBox):
+        self.startBox = startBox
+        self.endBox = endBox
+        self.updatePositionBoxes()
+
+    def updatePositionBoxes(self):
+        self.startBox.setText(str(round(self.limits[0]/1000)))
+        self.endBox.setText(str(round((self.limits[0]+self.limits[1])/1000)))
+
+    #Takes (validated positive int) start and end position line edit widgets and updates active region
+    def updateStartEnd(self):
+        chromo = self.chromosomes[self.activeChromo]
+        #The locations are given in kb
+        startPos = int(self.startBox.text())*1000
+        endPos = int(self.endBox.text())*1000
+        #Make sure start is less than end and not outside chromosome
+        if endPos > int(chromo.end):
+            endPos = int(chromo.end)
+        if startPos < endPos:
+            limits = [startPos, endPos-startPos]
+            self.limits = limits
+            rectStart = self.overviewArea.left() + (startPos / int(chromo.end)) * self.overviewArea.width()
+            rectWidth = ((endPos-startPos) / int(chromo.end)) * self.overviewArea.width()
+            mRect = QRectF(rectStart,0,rectWidth,30)
+            self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+            self.updatePlot()
+        self.updatePositionBoxes()
 
     def updateDelDup(self,delLine,dupLine):
         coverageSpan = (self.maxCoverage - self.minCoverage)*2

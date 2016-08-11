@@ -405,6 +405,8 @@ class SciVisView(QMainWindow):
         if self.confirmClose():
             view = self.sceneTabs.widget(viewIndex)
             self.views.remove(view)
+            vChromo = self.viewChromosomes[viewIndex]
+            self.viewChromosomes.remove(vChromo)
             if not self.views:
                 self.activeScene = False
                 self.removeDockWidget(self.dockWidget)
@@ -478,11 +480,26 @@ class SciVisView(QMainWindow):
             addExcludeFileAct.triggered.connect(view.addExcludeFile)
             addExcludeGCFileAct = QAction('Add GC file',self)
             addExcludeGCFileAct.triggered.connect(view.addExcludeGCFile)
+            intVal = QIntValidator()
+            intVal.setBottom(0)
+            startPosBox = QLineEdit()
+            startPosBox.setMaximumWidth(100)
+            endPosBox = QLineEdit()
+            endPosBox.setMaximumWidth(100)
+            startPosBox.setValidator(intVal)
+            endPosBox.setValidator(intVal)
+            view.connectPositionBoxes(startPosBox,endPosBox)
+            startPosBox.returnPressed.connect(lambda: view.updateStartEnd())
+            endPosBox.returnPressed.connect(lambda: view.updateStartEnd())
             self.tools.addAction(showChInfoAct)
             self.tools.addAction(addBedAct)
             self.tools.addAction(addExcludeFileAct)
             self.tools.addAction(addExcludeGCFileAct)
             self.tools.addWidget(plotTypeBox)
+            self.tools.addWidget(QLabel("Start (kb):"))
+            self.tools.addWidget(startPosBox)
+            self.tools.addWidget(QLabel("End (kb):"))
+            self.tools.addWidget(endPosBox)
             self.tools.show()
         if viewType == "karyogram":
             view.updateToggles()
