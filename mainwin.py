@@ -718,7 +718,11 @@ class SciVisView(QMainWindow):
             data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors)
 
     def resetSettings(self):
-        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig) = data.readConfig("defaultSettings.conf")
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("defaultSettings.conf")
+        data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors)
+        self.colorNames = self.colors.keys()
+        for name in self.colorNames:
+            self.colors[name] = QColor(self.colors[name])
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()

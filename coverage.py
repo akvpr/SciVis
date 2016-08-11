@@ -706,6 +706,24 @@ class CoverageGraphicsView(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
+    #Opens a context menu on right click
+    def contextMenuEvent(self,event):
+        self.lastContextPos = event.pos()
+        menu = QMenu()
+        addSceneTextAct = QAction('Insert text',self)
+        addSceneTextAct.triggered.connect(self.addSceneText)
+        menu.addAction(addSceneTextAct)
+        menu.exec_(QCursor.pos())
+
+    def addSceneText(self):
+        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
+        if ok and text:
+            textItem = QGraphicsTextItem(text)
+            textItem.setPos(self.lastContextPos)
+            textItem.setFlag(QGraphicsItem.ItemIsMovable)
+            textItem.setTextInteractionFlags(Qt.TextEditorInteraction)
+            self.scene().addItem(textItem)
+
 #Graphics view for bed tracks, with most events disabled
 class BedGraphicsView(QGraphicsView):
 
