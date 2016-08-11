@@ -195,13 +195,17 @@ def readConfig(toRead):
                     colorConfig[fields[0]] = fields[1].strip('\n')
     return (circularConfig,coverageConfig,karyoConfig,heatmapConfig,colorConfig)
 
-def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig):
+def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig,colorConfig):
 
     with open(fileName,'r+') as config:
         configData = config.readlines()
         activeSection = "CIRCULAR"
         newData = []
         for line in configData:
+            if line.startswith('#'):
+                line = line.strip('\n')
+                newData.append(line)
+                continue
             if line.startswith('['):
                 if line.startswith('[CIRCULAR]'):
                     activeSection = 'CIRCULAR'
@@ -211,6 +215,8 @@ def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig)
                     activeSection = 'KARYOGRAM'
                 elif line.startswith('[HEATMAP]'):
                     activeSection = 'HEATMAP'
+                elif line.startswith('[COLORS]'):
+                    activeSection = 'COLORS'
             else:
                 if activeSection == "CIRCULAR":
                     fields = line.split('=')
@@ -224,6 +230,8 @@ def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig)
                 elif activeSection == "HEATMAP":
                     fields = line.split('=')
                     line = line.replace(fields[1],heatmapConfig[fields[0]])
+                elif activeSection == 'COLORS':
+                    pass
             line = line.strip('\n')
             newData.append(line)
         config.seek(0)

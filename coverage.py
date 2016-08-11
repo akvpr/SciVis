@@ -624,9 +624,7 @@ class CoverageView(QWidget):
                     regionGraphicB.setOpacity(0.6)
                     self.mainScene.addItem(regionGraphicA)
                     self.mainScene.addItem(regionGraphicB)
-
             else:
-
                 bpStart = variant[1]
                 bpEnd = variant[3]
                 if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:

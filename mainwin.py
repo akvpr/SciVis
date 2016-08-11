@@ -715,7 +715,7 @@ class SciVisView(QMainWindow):
 
     def saveSettings(self):
         if self.activeScene:
-            data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig)
+            data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors)
 
     def resetSettings(self):
         (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig) = data.readConfig("defaultSettings.conf")
