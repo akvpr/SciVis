@@ -60,6 +60,7 @@ class CoverageView(QWidget):
         self.firstStart = True
         self.startBox = None
         self.endBox = None
+        self.matchLocations = []
 
     def startScene(self):
         if self.firstStart:
@@ -68,6 +69,10 @@ class CoverageView(QWidget):
             #Dict for position marker values for chromosomes
             self.chromoSelectorRects = {chromo.name: QRectF(self.overviewArea) for chromo in self.chromosomes}
             self.selectorItem = AreaSelectorItem(self.overviewArea,self.overviewArea,self)
+            #Slightly scale down views for better fit
+            self.mainView.scale(0.95,0.95)
+            self.bedView.scale(0.95,1)
+            self.bedView.horizontalScrollBar().setValue(self.mainView.horizontalScrollBar().value())
         self.firstStart = False
 
     def returnActiveDataset(self):
@@ -427,6 +432,7 @@ class CoverageView(QWidget):
                 pointItem.setData(0,'plotItem')
                 pointBp = round((pointRect.center().x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
                 pointItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
+                pointItem.setZValue(1)
                 self.mainScene.addItem(pointItem)
 
         elif ptype == 1:
@@ -456,6 +462,7 @@ class CoverageView(QWidget):
                 lineItem.setData(0,'plotItem')
                 pointBp = round((startPoint.x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
                 lineItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
+                lineItem.setZValue(1)
                 self.mainScene.addItem(lineItem)
 
     def updatePlot(self):
@@ -491,6 +498,7 @@ class CoverageView(QWidget):
             self.markVariants()
         except:
             pass
+        self.markSearchedRegions()
         self.update()
 
     def defineRectangles(self):
@@ -526,7 +534,6 @@ class CoverageView(QWidget):
     def connectPositionBoxes(self,startBox,endBox):
         self.startBox = startBox
         self.endBox = endBox
-        self.updatePositionBoxes()
 
     def updatePositionBoxes(self):
         self.startBox.setText(str(round(self.limits[0]/1000)))
@@ -568,6 +575,7 @@ class CoverageView(QWidget):
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
         self.varTable = varTable
         self.updateLimits()
+        self.matchLocations = []
         self.updatePlot()
 
     def addTracks(self,chromo):
@@ -640,7 +648,7 @@ class CoverageView(QWidget):
                         endWinA = int(variant[5]["WINA"].split(',')[1])
                         startWinB = int(variant[5]["WINB"].split(',')[0])
                         endWinB = int(variant[5]["WINB"].split(',')[1])
-                if variant[0] is variant[2] and startWinA > self.limits[0] and endWinB < self.limits[0] + self.limits[1]:
+                if variant[0] is variant[2] and startWinA >= self.limits[0] and endWinB <= self.limits[0] + self.limits[1]:
                     startRegionA = self.graphArea.left() + ( (startWinA-self.limits[0])/self.limits[1] ) * self.graphArea.width()
                     widthRegionA = (endWinA-startWinA)/self.limits[1] * self.graphArea.width()
                     startRegionB = self.graphArea.left() + ( (startWinB-self.limits[0])/self.limits[1] ) * self.graphArea.width()
@@ -662,7 +670,7 @@ class CoverageView(QWidget):
             else:
                 bpStart = variant[1]
                 bpEnd = variant[3]
-                if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                if (variant[0] is variant[2]) and bpStart >= self.limits[0] and bpEnd <= self.limits[0] + self.limits[1]:
                     regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
                     regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
                     regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
@@ -711,7 +719,7 @@ class CoverageView(QWidget):
         for region in self.excludeDict[chromo.name]:
             bpStart = region[0]
             bpEnd = region[1]
-            if bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+            if bpStart >= self.limits[0] and bpEnd <= self.limits[0] + self.limits[1]:
                 regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
                 regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
                 regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
@@ -719,6 +727,37 @@ class CoverageView(QWidget):
                 for item in intersectingItems:
                      if item.data(0) == 'plotItem':
                          self.mainScene.removeItem(item)
+
+    #Searches for specified text in cytoband definitions and added track elements
+    #and attempts to mark this location if a match is found
+    def searchString(self,text):
+        chromo = self.chromosomes[self.activeChromo]
+        self.matchLocations = []
+        #Search for a cytoband match in this chromosome
+        matches = [ [line[1],line[2]] for line in self.cytoInfo if (line[0] == chromo.name and text in line[3])]
+        self.matchLocations.extend(matches)
+        #Search in added track elements for this chromo
+        bedmatches = []
+        for bedLines in self.bedDict[chromo.name]:
+            matches = [[line[1],line[2]] for line in bedLines if text in line[3]]
+            self.matchLocations.extend(matches)
+        self.updatePlot()
+
+    def markSearchedRegions(self):
+        for location in self.matchLocations:
+            bpStart = int(location[0])
+            bpEnd = int(location[1])
+            if bpStart >= self.limits[0] and bpEnd <= self.limits[0] + self.limits[1]:
+                regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                pen = QPen(QBrush(Qt.blue),1)
+                pen.setStyle(Qt.DashLine)
+                regionGraphic = QGraphicsRectItem(regionRect)
+                regionGraphic.setBrush(Qt.blue)
+                regionGraphic.setPen(pen)
+                regionGraphic.setOpacity(0.6)
+                self.mainScene.addItem(regionGraphic)
 
 #Handles events for main graph area
 class CoverageGraphicsView(QGraphicsView):
