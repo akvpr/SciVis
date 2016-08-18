@@ -33,12 +33,10 @@ class SciVisView(QMainWindow):
         self.saveIcon = QIcon("icons/save.png")
         self.settingsIcon = QIcon("icons/settings.png")
         #Load config file
-        self.reader = data.Reader()
-        self.reader.readConfig("userSettings.conf")
-        self.circularConfig = self.reader.returnCircConfig()
-        self.coverageConfig = self.reader.returnCovConfig()
-        self.karyoConfig = self.reader.returnKaryoConfig()
-        self.heatmapConfig = self.reader.returnHeatmapConfig()
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("userSettings.conf")
+        self.colorNames = self.colors.keys()
+        for name in self.colorNames:
+            self.colors[name] = QColor(self.colors[name])
         #Create actions for menus and toolbars, connect to functions
         newCircAct = QAction('New circular diagram',self)
         newCircAct.triggered.connect(self.newCirc)
@@ -269,19 +267,20 @@ class SciVisView(QMainWindow):
             self.datasetModel.appendRow(dataItem)
 
     #Creates data model item, and adds to main dataset model
-    def createDatasetItem(self, reader, setname):
-        #Should display setname as parent
-        dataItem = QStandardItem(setname)
-        #Create a dict storing the actual data, and attach to item
-        chromosomeList = reader.returnChrList()
-        coverageNormLog = reader.returnCoverageNormLog()
-        coverageNorm = reader.returnCoverageNorm()
-        vcfName = reader.returnVcfName()
-        tabName = reader.returnTabName()
-        cytoTab = reader.returnCytoTab()
+    def createDatasetItem(self, tabName, vcfName, setName):
+        self.statusBar().showMessage("Reading TAB..")
+        (chromosomeList,coverageNorm,coverageNormLog,totalBP) = data.readTab(tabName)
+        self.statusBar().showMessage("Reading VCF..")
+        (chromosomeList,vcfInfoLines) = data.readVCFFile(vcfName,chromosomeList)
+        self.statusBar().showMessage("Reading cytoband file..")
         cytoName = "cytoBand.txt"
+        cytoTab = data.readCytoTab(cytoName)
+        self.statusBar().clearMessage()
+        #Should display setname as parent
+        dataItem = QStandardItem(setName)
+        #Create a dict storing the actual data, and attach to item
         itemData = {'chromosomeList':chromosomeList,'coverageNormLog':coverageNormLog,'coverageNorm':coverageNorm,
-        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab,'setName':setname}
+        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab,'setName':setName}
         dataItem.setData(itemData)
         #Vcf and tab names should be child items
         vcfItem = QStandardItem(vcfName)
@@ -320,19 +319,10 @@ class SciVisView(QMainWindow):
             if tabFile:
                 vcfFile = QFileDialog.getOpenFileName(None,"Specify VCF file",self.defaultFolder,
                 "VCF files (*.vcf)")[0]
-                cytoFile = "cytoBand.txt"
                 #Cancel results in empty string, only go ahead if not empty
                 if tabFile and vcfFile:
-                    reader = data.Reader()
-                    self.statusBar().showMessage("Reading TAB..")
-                    reader.readTab(tabFile)
-                    self.statusBar().showMessage("Reading VCF..")
-                    reader.readVCFFile(vcfFile)
-                    self.statusBar().showMessage("Reading cytoband file..")
-                    reader.readCytoTab(cytoFile)
-                    self.statusBar().clearMessage()
                     #Create a model item to be used for viewing datasets
-                    self.createDatasetItem(reader, setName)
+                    self.createDatasetItem(tabFile,vcfFile,setName)
 
     def editDataset(self,index):
         #User might have clicked on a child item with no data -- try to get parent item if so
@@ -347,20 +337,12 @@ class SciVisView(QMainWindow):
                 cytoFile = "cytoBand.txt"
                 #Cancel results in empty string, only go ahead if not empty
                 if tabFile and vcfFile:
-                    reader = data.Reader()
-                    self.statusBar().showMessage("Reading TAB..")
-                    reader.readTab(tabFile)
-                    self.statusBar().showMessage("Reading VCF..")
-                    reader.readVCFFile(vcfFile)
-                    self.statusBar().showMessage("Reading cytoband file..")
-                    reader.readCytoTab(cytoFile)
-                    self.statusBar().clearMessage()
                     #Remove current item from model, create a new item, insert item
                     oldItem = self.datasetModel.itemFromIndex(index)
                     setName = oldItem.data()["setName"]
                     oldRow = index.row()
                     self.datasetModel.removeRow(oldRow)
-                    self.createDatasetItem(reader, setName)
+                    self.createDatasetItem(tabFile,vcfFile,setName)
 
     #Opens a window showing existing datasets
     def viewDatasets(self):
@@ -627,39 +609,35 @@ class SciVisView(QMainWindow):
             self.show()
 
     def createColorModel(self):
-        #Model allowing stain colors to be changed globally
-        self.stainNames = ['heatmapColor', 'acen','gneg','gpos100','gpos25','gpos50','gpos75','gvar','stalk']
-        self.stainColors = {'heatmapColor':Qt.darkRed, 'acen':Qt.darkRed, 'gneg':Qt.white,'gpos100':Qt.black,'gpos25':Qt.lightGray,'gpos50':Qt.gray,
-        'gpos75':Qt.darkGray,'gvar':Qt.white,'stalk':Qt.red}
+        #Model allowing colors to be changed globally
         self.colorModel = QStandardItemModel()
-        stainItems = []
+        nameItems = []
         colorItems = []
-        for stainName in self.stainNames:
-            stainItem = QStandardItem(stainName)
-            stainItem.setEditable(False)
-            stainItem.setSelectable(False)
-            stainItems.append(stainItem)
+        for colorName in sorted(self.colors.keys()):
+            nameItem = QStandardItem(colorName)
+            nameItem.setEditable(False)
+            nameItem.setSelectable(False)
+            nameItems.append(nameItem)
             colorItem = QStandardItem()
             colorItem.setSizeHint(QSize(40,40))
-            colorItem.setBackground(self.stainColors[stainName])
+            colorItem.setBackground(QColor(self.colors[colorName]))
             colorItem.setEditable(False)
             colorItem.setSelectable(False)
             colorItems.append(colorItem)
-        self.colorModel.appendColumn(stainItems)
+        self.colorModel.appendColumn(nameItems)
         self.colorModel.appendColumn(colorItems)
 
     def pickColor(self,modelIndex):
         selectedRow = modelIndex.row()
-        stainItem = self.colorModel.item(selectedRow,0)
+        nameItem = self.colorModel.item(selectedRow,0)
         colorItem = self.colorModel.item(selectedRow,1)
         chosenColor = QColorDialog.getColor(colorItem.background().color())
-        self.stainColors[stainItem.text()] = chosenColor
+        self.colors[nameItem.text()] = chosenColor
         colorItem.setBackground(chosenColor)
 
     def heatColor(self):
-        color = QColorDialog.getColor(self.stainColors["heatmapColor"])
-        self.stainColors["heatmapColor"] = color
-        self.colorModel.item(0,1).setBackground(color)
+        color = QColorDialog.getColor(self.colors["heatmapColor"])
+        self.colors["heatmapColor"] = color
         self.updateSettings()
 
     def viewSettings(self):
@@ -726,12 +704,25 @@ class SciVisView(QMainWindow):
         if self.activeScene:
             view = self.sceneTabs.currentWidget()
             view.updateSettings()
-            
+            if view.type == 'circ':
+                self.circularConfig = view.returnSettingsDict()
+            if view.type == 'coverage':
+                self.coverageConfig = view.returnSettingsDict()
+            if view.type == 'karyogram':
+                self.karyoConfig = view.returnSettingsDict()
+            if view.type == 'heatmap':
+                self.heatmapConfig = view.returnSettingsDict()
+
     def saveSettings(self):
-        return 0
-        
+        if self.activeScene:
+            data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors)
+
     def resetSettings(self):
-        return 0
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("defaultSettings.conf")
+        data.saveConfig("userSettings.conf",self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors)
+        self.colorNames = self.colors.keys()
+        for name in self.colorNames:
+            self.colors[name] = QColor(self.colors[name])
 
     def selectChromosome(self,selected,deselected):
         view = self.sceneTabs.currentWidget()

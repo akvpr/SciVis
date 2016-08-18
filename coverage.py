@@ -29,15 +29,15 @@ class CoverageView(QWidget):
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
-        self.stainNames = parent.stainNames
-        self.stainColors = parent.stainColors
+        self.colorNames = parent.colorNames
+        self.colors = parent.colors
         self.bpWindow = int(self.coverageSettings["bpWindow"])
-        self.minCoverage = int(self.coverageSettings["minCoverage"])/100
-        self.maxCoverage = int(self.coverageSettings["maxCoverage"])/100
+        self.minCoverage = float(self.coverageSettings["minCoverage"])/100
+        self.maxCoverage = float(self.coverageSettings["maxCoverage"])/100
         self.dupLimit = float(self.coverageSettings["dupLimit"])
         self.delLimit = float(self.coverageSettings["delLimit"])
+        self.minBedBp = int(self.coverageSettings["minBedBp"])
         self.plotType = 0
-        self.minBedBp = 500
         self.createSettings()
         self.coverageNormLog = self.dataDict['coverageNormLog']
         self.coverageNorm = self.dataDict['coverageNorm']
@@ -137,17 +137,23 @@ class CoverageView(QWidget):
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:
-                self.bpWindow = item.data(0)
+                self.bpWindow = int(item.data(0))
             if row == 1:
                 self.dupLimit = item.data(0)
             if row == 2:
                 self.delLimit = item.data(0)
             if row == 3:
-                self.minCoverage = item.data(0)/100
+                self.minCoverage = float(item.data(0))/100
             if row == 4:
-                self.maxCoverage = item.data(0)/100
+                self.maxCoverage = float(item.data(0))/100
             if row == 5:
                 self.minBedBp = item.data(0)
+        self.coverageSettings["bpWindow"] = str(self.bpWindow)
+        self.coverageSettings["minCoverage"] = str(self.minCoverage*100)
+        self.coverageSettings["maxCoverage"] = str(self.maxCoverage*100)
+        self.coverageSettings["dupLimit"] = str(self.dupLimit)
+        self.coverageSettings["delLimit"] = str(self.delLimit)
+        self.coverageSettings["minBedBp"] = str(self.minBedBp)
         self.updatePlot()
 
     #Creates and returns a widget with this view's settings
@@ -165,6 +171,9 @@ class CoverageView(QWidget):
         settingsLayout.addWidget(settingsList,0,0,1,3)
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
+
+    def returnSettingsDict(self):
+        return self.coverageSettings
 
     #Creates data model for info window
     def createChInfo(self):
@@ -318,7 +327,7 @@ class CoverageView(QWidget):
                 else:
                     #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                     bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
-                bandRectItem.setBrush(self.stainColors[cyto[4]])
+                bandRectItem.setBrush(self.colors[cyto[4]])
                 bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                 self.overviewScene.addItem(bandRectItem)
                 #Add the chromosome name to the left of the area
@@ -636,8 +645,7 @@ class CoverageView(QWidget):
         excludeFile = QFileDialog.getOpenFileName(None,"Specify tab file",QDir.currentPath(),
         "tab files (*.tab)")[0]
         if excludeFile:
-            reader = data.Reader()
-            excludeLines = reader.readGeneralTab(excludeFile)
+            excludeLines = data.readGeneralTab(excludeFile)
             #Read each line and look for positions markd with (-1)
             #Create a dict and for each chromosome, create a list with excluded positions
             for line in excludeLines:
@@ -653,8 +661,7 @@ class CoverageView(QWidget):
         excludeFile = QFileDialog.getOpenFileName(None,"Specify exclude file",QDir.currentPath(),
         "exclude files (*.tab *.txt)")[0]
         if excludeFile:
-            reader = data.Reader()
-            excludeLines = reader.readGeneralTab(excludeFile)
+            excludeLines = data.readGeneralTab(excludeFile)
             #Create a dict and for each chromosome, create a list with excluded positions
             for line in excludeLines:
                 #Formatted as chr, start, end
@@ -699,6 +706,24 @@ class CoverageGraphicsView(QGraphicsView):
             self.connectedView.horizontalScrollBar().setValue(self.horizontalScrollBar().value())
         else:
             QGraphicsView.wheelEvent(self, event)
+
+    #Opens a context menu on right click
+    def contextMenuEvent(self,event):
+        self.lastContextPos = event.pos()
+        menu = QMenu()
+        addSceneTextAct = QAction('Insert text',self)
+        addSceneTextAct.triggered.connect(self.addSceneText)
+        menu.addAction(addSceneTextAct)
+        menu.exec_(QCursor.pos())
+
+    def addSceneText(self):
+        (text, ok) = QInputDialog.getText(None, 'Insert text', 'Text:')
+        if ok and text:
+            textItem = QGraphicsTextItem(text)
+            textItem.setPos(self.lastContextPos)
+            textItem.setFlag(QGraphicsItem.ItemIsMovable)
+            textItem.setTextInteractionFlags(Qt.TextEditorInteraction)
+            self.scene().addItem(textItem)
 
 #Graphics view for bed tracks, with most events disabled
 class BedGraphicsView(QGraphicsView):

@@ -10,8 +10,7 @@ def createBedDict():
     bedFile = QFileDialog.getOpenFileName(None,"Specify bed file",QDir.currentPath(),
     "bed files (*.bed *.txt *.tab)")[0]
     if bedFile:
-        reader = data.Reader()
-        bedLines = reader.readGeneralTab(bedFile)
+        bedLines = data.readGeneralTab(bedFile)
         bedFileName = bedFile.split('/')[-1].replace('.bed','').replace('.txt','').replace('.tab','')
         for line in bedLines:
             chrName = line[0]
@@ -79,7 +78,7 @@ def createVariantInfo(chromo):
         infoitem.append(markCheckItem)
         varModel.appendRow(infoitem)
     return varModel
-    
+
     #Toggles individual variants on and off
 def returnVariants(chromo, varView):
     selectedProxyIndexes = varView.selectedIndexes()

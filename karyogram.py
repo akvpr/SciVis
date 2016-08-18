@@ -15,8 +15,8 @@ class KaryogramView(QGraphicsView):
         self.chromosomes = self.dataDict['chromosomeList']
         self.chromosomeDict = {chromo.name: chromo for chromo in self.chromosomes}
         self.cytoInfo = self.dataDict['cytoTab']
-        self.stainNames = parent.stainNames
-        self.stainColors = parent.stainColors
+        self.colorNames = parent.colorNames
+        self.colors = parent.colors
         self.numDispChromos = 24
         self.itemsPerRow = int(self.karyoSettings["itemsPerRow"])
         self.cytoGraphicItems = {}
@@ -56,12 +56,13 @@ class KaryogramView(QGraphicsView):
 
     def updateSettings(self):
         #Go through every row in the settings model and update accordingly
-        #self.stainColors = self.stainColors
+        #self.colors = self.colors
         self.updateItems()
         for row in range(self.settingsModel.rowCount()):
             item = self.settingsModel.item(row,1)
             if row == 0:
-                self.itemsPerRow = item.data(0)
+                self.itemsPerRow = int(item.data(0))
+        self.karyoSettings["itemsPerRow"] = str(self.itemsPerRow)
 
     #Creates and returns a widget with this view's settings
     def returnSettingsWidget(self):
@@ -81,6 +82,9 @@ class KaryogramView(QGraphicsView):
         settingsWidget.setLayout(settingsLayout)
         return settingsWidget
 
+    def returnSettingsDict(self):
+        return self.karyoSettings
+
     #Updates display toggles according to this scene's active chModel
     def updateToggles(self):
         for row in range(self.chModel.rowCount()):
@@ -94,7 +98,6 @@ class KaryogramView(QGraphicsView):
                 self.chromosomes[row].display_connections = True
             else:
                 self.chromosomes[row].display_connections = False
-        
         self.updateItems()
 
     #Creates data model for info window
@@ -203,7 +206,7 @@ class KaryogramView(QGraphicsView):
         chromoWidget = QWidget()
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
-        
+
     def setActiveChromosome(self,chromoNumber,varTable):
         self.varTable = varTable
         self.activeChromo = self.chromosomes[chromoNumber]
@@ -475,7 +478,7 @@ class KaryogramView(QGraphicsView):
                             #Create a rect item with corresponding stain color, tooltip, set data to band name for later use
                             bandRectItem = QGraphicsRectItem(bandXPos,bandYPos,bandWidth,bandHeight)
                             rounded = "none"
-                        bandRectItem.setBrush(self.stainColors[cyto[4]])
+                        bandRectItem.setBrush(self.colors[cyto[4]])
                         bandRectItem.setToolTip(cyto[3] + ": " + str(totalCytoBP) + " bp")
                         bandRectItem.setData(0,cyto[3])
                         bandRectItem.setData(2, cytoStart)
@@ -612,8 +615,7 @@ class KaryogramView(QGraphicsView):
                         self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
                         self.scene.addItem(markRectItem)
                         self.variantMarkItems.append(markRectItem)
-                    
-          
+
     def updateItems(self):
         #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user
