@@ -122,9 +122,9 @@ def createVariantWidget(chromo):
     sourceModel = createVariantInfo(chromo)
     varList = QTableView()
     #Create button for activation of variants
-    varButton = QPushButton('Toggle selected variant(s)')
+    varButton = QPushButton('Toggle')
     varButton.clicked.connect(lambda: toggleVariants(chromo, varList))
-    markButton = QPushButton('Mark selected variant(s)')
+    markButton = QPushButton('Mark')
     markButton.clicked.connect(lambda: markVariants(chromo, varList))
     varList.setSortingEnabled(True)
     varList.verticalHeader().hide()
@@ -162,7 +162,7 @@ def toggleVariants(chromo, varView):
             dispVarItem.setCheckState(Qt.Checked)
             chromo.variants[row][9] = True
     chromo.createConnections()
-    
+
 def markVariants(chromo, varView):
     selectedProxyIndexes = varView.selectedIndexes()
     #Selected indexes are indexes in proxy model, so translate to source indexes

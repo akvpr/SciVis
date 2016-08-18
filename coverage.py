@@ -359,9 +359,10 @@ class CoverageView(QWidget):
                 val = minCov
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
-        startIndex = round(limits[0] / int(chromo.end) * len(coverageData))
-        endIndex = round((limits[0] + limits[1]) / int(chromo.end) * len(coverageData))
-        coverageData = coverageData[startIndex:endIndex]
+
+        #startIndex = round(limits[0] / int(chromo.end) * len(coverageData))
+        #endIndex = round((limits[0] + limits[1]) / int(chromo.end) * len(coverageData))
+        #coverageData = coverageData[startIndex:endIndex]
 
         #Draw the y axis
         leftLine = QLineF(self.graphArea.bottomLeft(),self.graphArea.topLeft())
@@ -415,13 +416,16 @@ class CoverageView(QWidget):
             xTickLabelItem.setPos(point +  QPointF(0, 0))
             self.mainScene.addItem(xTickLabelItem)
 
+        self.dataPoints = []
         #Place the actual data values on the graph
         if ptype == 0:
 
             for index in range(len(coverageData)):
-                pointRect = QRectF( self.graphArea.left() + (index/len(coverageData))*self.graphArea.width() -2.5,
-                self.graphArea.bottom() - coverageData[index]*yAxisIncrement -2.5, 5, 5  )
+                pointRect = QRectF(0,0,5,5)
+                xPos = self.graphArea.left() + (index/len(coverageData))*self.graphArea.width() -2.5
+                yPos = self.graphArea.bottom() - coverageData[index]*yAxisIncrement -2.5
                 pointItem = QGraphicsEllipseItem(pointRect)
+                pointItem.setPos(xPos,yPos)
                 if coverageData[index] < self.delLimit:
                     pointItem.setBrush(QBrush(Qt.red))
                 elif coverageData[index] > self.dupLimit:
@@ -430,10 +434,13 @@ class CoverageView(QWidget):
                     pointItem.setBrush(QBrush(Qt.black))
                 #Set data with key 0 as 'plotItem' for convenience
                 pointItem.setData(0,'plotItem')
-                pointBp = round((pointRect.center().x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
-                pointItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
+                pointBp = index*self.bpWindow*1000
+                pointItem.setToolTip( str(pointBp) + " bp: " +  str(round(coverageData[index],4)) )
                 pointItem.setZValue(1)
+                pointItem.setData(1,pointBp)
+                pointItem.setData(2,coverageData[index])
                 self.mainScene.addItem(pointItem)
+                self.dataPoints.append(pointItem)
 
         elif ptype == 1:
 
@@ -460,22 +467,36 @@ class CoverageView(QWidget):
                 lineItem = QGraphicsLineItem(line)
                 lineItem.setPen(colorPen)
                 lineItem.setData(0,'plotItem')
-                pointBp = round((startPoint.x() - self.graphArea.left()) / self.graphArea.width() * int(chromo.end))
+                pointBp = index*self.bpWindow*1000
                 lineItem.setToolTip( str(pointBp) + " bp: " + str(round(coverageData[index],4)) )
                 lineItem.setZValue(1)
+                lineItem.setData(1,pointBp)
+                lineItem.setData(2,coverageData[index])
                 self.mainScene.addItem(lineItem)
+                self.dataPoints.append(pointItem)
+
+    def placeDataPoints(self):
+        #Spread out shown values over graph
+        for point in self.dataPoints:
+            if point.data(1) >= self.limits[0] and point.data(1) <= self.limits[0] + self.limits[1]:
+                point.show()
+                xPos = self.graphArea.left() + (point.data(1)-self.limits[0])/(self.limits[1])*self.graphArea.width()
+                point.setX(xPos)
+            else:
+                point.hide()
 
     def updatePlot(self):
         chromo = self.chromosomes[self.activeChromo]
         #Save position and size of current chromosome marker before clearing
         mRect = self.selectorItem.returnMarkerRect()
-        self.mainScene.clear()
+        #self.mainScene.clear()
         self.bedScene.clear()
         self.overviewScene.clear()
         #Create position overview item
         self.createOverview(chromo)
         #Plot coverage
-        self.createPlot(chromo,self.plotType,self.limits)
+        #self.createPlot(chromo,self.plotType,self.limits)
+        self.placeDataPoints()
         #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
         self.overviewScene.addItem(self.selectorItem)
@@ -576,6 +597,9 @@ class CoverageView(QWidget):
         self.varTable = varTable
         self.updateLimits()
         self.matchLocations = []
+        self.mainScene.clear()
+        chromo = self.chromosomes[self.activeChromo]
+        self.createPlot(chromo,self.plotType,self.limits)
         self.updatePlot()
 
     def addTracks(self,chromo):
@@ -633,7 +657,7 @@ class CoverageView(QWidget):
         chrA = self.chromosomes[self.activeChromo]
         selectedVariants = common.returnVariants(chrA,self.varTable)
         for variant in chrA.variants:
-                
+
             if variant[9] and not variant[2].startswith("G") and (variant in selectedVariants or variant[11]):
                 if "WINA" in variant[5]:
                     chrB = self.chromosomeDict[variant[2]]
@@ -642,7 +666,7 @@ class CoverageView(QWidget):
                             endWinA = int(variant[5]["WINB"].split(',')[1])
                             startWinB = int(variant[5]["WINA"].split(',')[0])
                             endWinB = int(variant[5]["WINA"].split(',')[1])
-                    else: 
+                    else:
                             startWinA = int(variant[5]["WINA"].split(',')[0])
                             endWinA = int(variant[5]["WINA"].split(',')[1])
                             startWinB = int(variant[5]["WINB"].split(',')[0])
@@ -667,7 +691,7 @@ class CoverageView(QWidget):
                         self.mainScene.addItem(regionGraphicA)
                         self.mainScene.addItem(regionGraphicB)
 
-                else:  
+                else:
                     bpStart = variant[1]
                     bpEnd = variant[3]
                     if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
