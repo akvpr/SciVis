@@ -265,6 +265,7 @@ class Chromosome():
     def addVariant(self,chrA,posA,chrB,posB,event_type,description,format):
         #The variants are by default set to be shown
         display_variant = True
+        marked = False
         #For every variant we would like the genes in CSQ, if this exists
         if "CSQ" in description:
             csqField = description["CSQ"]
@@ -291,7 +292,7 @@ class Chromosome():
         else:
             rankScore = None
         #Add the variant data to this chromosome
-        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband,display_variant,rankScore]
+        variant = [chrA,posA,chrB,posB,event_type,description,format,allGenes,cband,display_variant,rankScore, marked]
         self.variants.append(variant)
 
     def createConnections(self):

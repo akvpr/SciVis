@@ -29,7 +29,6 @@ class KaryogramView(QGraphicsView):
         self.show()
         self.createSettings()
         self.createChInfo()
-        self.updateItems()
 
     def returnActiveDataset(self):
         return self.dataDict
@@ -151,9 +150,9 @@ class KaryogramView(QGraphicsView):
         #Button for toggling display of selected chromosomes in the scene
         togButton = QPushButton('Toggle display', self.chDia)
         togButton.clicked.connect(self.toggleDisp)
-        #Button for viewing selected chromosome variants
-        viewVarButton = QPushButton('View variants', self.chDia)
-        viewVarButton.clicked.connect(self.viewVariants)
+        #Button for viewing selected chromosome selectedVariants
+        viewVarButton = QPushButton('View selectedVariants', self.chDia)
+        viewVarButton.clicked.connect(self.viewselectedVariants)
         #Button for toggling connections
         connButton = QPushButton('Toggle connections', self.chDia)
         connButton.clicked.connect(self.toggleConnections)
@@ -185,18 +184,14 @@ class KaryogramView(QGraphicsView):
         togButton = QPushButton(QIcon("icons/display.png"),"")
         togButton.clicked.connect(self.toggleDisp)
         togButton.setToolTip("Toggle display of chromosome")
-        #Button for viewing selected chromosome variants
+        #Button for viewing selected chromosome selectedVariants
         viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
         viewVarButton.clicked.connect(self.viewVariants)
-        viewVarButton.setToolTip("View variants in chromosome")
-        #Button for adding variants
-        #addVariantButton = QPushButton(QIcon("icons/new.png"),"")
-        #addVariantButton.clicked.connect(self.addVariant)
-        #addVariantButton.setToolTip("Add custom variant")
+        viewVarButton.setToolTip("View selectedVariants in chromosome")
         #Button for toggling connections
         connButton = QPushButton(QIcon("icons/connections.png"),"")
         connButton.clicked.connect(self.toggleConnections)
-        connButton.setToolTip("Toggle display of connections between variants")
+        connButton.setToolTip("Toggle display of connections between selectedVariants")
         #Button for toggling cyto band names
         cytoButton = QPushButton(QIcon("icons/display.png"),"")
         cytoButton.clicked.connect(self.toggleBandNames)
@@ -219,7 +214,7 @@ class KaryogramView(QGraphicsView):
 
     #Creates a popup containing variant info in a table.
     def viewVariants(self):
-        #Find which chromosome's variants is to be viewed by looking at chList rows
+        #Find which chromosome's selectedVariants is to be viewed by looking at chList rows
         selectedIndexes = self.chList.selectedIndexes()
         selectedRows = [index.row() for index in selectedIndexes]
         selectedRows = set(selectedRows)
@@ -300,105 +295,94 @@ class KaryogramView(QGraphicsView):
     def drawConnections(self):
         self.connectionGraphicItems = []
         selectedVariants = []
-
+        if self.activeChromo and self.varTable:
+            selectedVariants = common.returnVariants(self.activeChromo,self.varTable)    
         placeLeft = True
         #Loops through the full list of chromosomes and checks if the connections should be displayed or not
         for chrA in self.chromosomes:
-            if not (chrA.display_connections and chrA.display):
+            if not chrA.display:
                 continue
-            #only create the connection list if it has not been initialized earlier
-            if not chrA.connections:
-                chrA.createConnections()
-            for connection in chrA.connections:
-                #The information is stored as string elements and needs to be converted to integers
-                if connection[1] == 'X':
-                    chrBIndex=22
-                    chrB = self.chromosomes[chrBIndex]
-                elif connection[1] == 'Y':
-                    chrBIndex=23
-                    chrB = self.chromosomes[chrBIndex]
-                elif (connection[1].startswith('G') or connection[1].startswith('M')):
-                    continue
-                else:
-                    chrB = self.chromosomes[int(connection[1])-1]
-                if not chrB.display or connection[4] is None:
-                    continue
-                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
-                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                    connEndPos = int(connection[2].split(',')[1])
-                    connStartPos = int(connection[3].split(',')[1])
-                else:
-                    connEndPos = int(connection[3].split(',')[1])
-                    connStartPos = int(connection[2].split(',')[1])
-
-                #The cytobands which the connections will go between
-                #look for the cytoband on chrA, data(2) is the start pos for the cytoband and data(3) is the end pos
-                for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
-                    if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
-                            cbandA = cytoItem.data(0)
-                #look for the cytoband on chrB
-                for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
-                    if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
-                        cbandB = cytoItem.data(0)
-                #do not show small variants within one cytoband
-                if cbandA == cbandB:
-                    continue
-                #do not show connections to bands that does not exist in the dictionary
-                if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
-                    continue
-                if chrA.name == chrB.name:
-                    if placeLeft:
-                        xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
-                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+            for variant in chrA.variants:
+                chrB = self.chromosomeDict[variant[2]]
+                #check whether a connection line will be shown. variant[9] is active/inactive, variant[2] is chrB - so do not show if chrB is GLXXXXX
+                #and then if either display_connections is true or if the variant is selected, or if it is marked (variant[11])
+                if variant[9] and not variant[2].startswith("G") and (chrA.display_connections or variant in selectedVariants or variant[11]):
+                    if not self.chromosomeDict[variant[2]].display:
+                        continue
+                    #if the windows are present use them, otherwise use START and END
+                    if "WINA" in variant[5]:                        
+                        #If chrA is higher in order than chrB, WINA and WINB are switched, so check this first  
+                        if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                            connStartPos = int(variant[5]["WINB"].split(',')[1])
+                            connEndPos = int(variant[5]["WINA"].split(',')[1])
+                        else:
+                            connStartPos = int(variant[5]["WINA"].split(',')[1])
+                            connEndPos = int(variant[5]["WINB"].split(',')[1])
+                    else:
+                        connStartPos = int(variant[1])
+                        connEndPos = int(variant[3])
+                    #The cytobands which the connections will go between
+                    #look for the cytoband on chrA. data(2) is the start pos for the cytoband and data(3) is the end pos, data(0) is the band object
+                    for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
+                        if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
+                                cbandA = cytoItem.data(0)
+                    #look for the cytoband on chrB
+                    for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
+                        if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
+                            cbandB = cytoItem.data(0)  
+                    #do not show small variants within the same cytoband
+                    if cbandA == cbandB:
+                        continue
+                    #do not show connections to bands that does not exist in the dictionary
+                    if not (cbandA in self.cytoGraphicItems[chrA.name].bandItemsDict and cbandB in self.cytoGraphicItems[chrB.name].bandItemsDict):
+                        continue
+                    #if we have an intrachromosomal variant, alternate placing the connection on the left or right side
+                    if chrA.name == chrB.name:    
+                        if placeLeft:
+                            xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().left()
+                            xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
+                        else:
+                            xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
+                            xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
                     else:
                         xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().right()
-                else:
-                    xPosA = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA].boundingRect().right()
-                    xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left()
-                #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
-                cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]
-                cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
-                yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
-                yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
-                #If the item has been moved, x and y are how much the item has been moved by; update position with these
-                xPosA += self.cytoGraphicItems[chrA.name].x()
-                xPosB += self.cytoGraphicItems[chrB.name].x()
-                yPosA += self.cytoGraphicItems[chrA.name].y()
-                yPosB += self.cytoGraphicItems[chrB.name].y()
-                pointA = QPoint(xPosA, yPosA)
-                pointB = QPoint(xPosB, yPosB)
-                connectionPath = QPainterPath()
-                connectionPath.moveTo(pointA)
-                if chrA.name == chrB.name:
-                    if placeLeft:
-                        pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
-                    else:
-                        pointC = QPoint(xPosA+80, (yPosA+yPosB)/2)
-                    placeLeft = not placeLeft
-                    connectionPath.quadTo(pointC, pointB)
-                else:
-                    connectionPath.lineTo(pointB)
-
-                connectionItem = QGraphicsPathItem(connectionPath)
-                pen = QPen()
-                pen.setBrush(Qt.darkCyan)
-                pen.setWidth(2)
-                connectionItem.setZValue(2)
-                if self.activeChromo and self.varTable:
-                    selectedChromo = self.activeChromo
-                    selectedVariants = common.returnVariants(selectedChromo,self.varTable)
-                    for variant in selectedVariants:
-                        if variant[0] is not variant[2]:
-                            variantConnection = [variant[0],variant[2],variant[5]["WINA"],variant[5]["WINB"],variant[8]]
+                        xPosB = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB].boundingRect().left() 
+                    #Find the y position of the actual cytoband in each chromosome, by accessing the chromosome band dicts
+                    cBandAItem = self.cytoGraphicItems[chrA.name].bandItemsDict[cbandA]                
+                    cBandBItem = self.cytoGraphicItems[chrB.name].bandItemsDict[cbandB]
+                    yPosA = cBandAItem.boundingRect().top() + cBandAItem.boundingRect().height() / 2
+                    yPosB = cBandBItem.boundingRect().top() + cBandBItem.boundingRect().height() / 2
+                    #If the item has been moved, x and y are how much the item has been moved by; update position with these
+                    xPosA += self.cytoGraphicItems[chrA.name].x()
+                    xPosB += self.cytoGraphicItems[chrB.name].x()
+                    yPosA += self.cytoGraphicItems[chrA.name].y()
+                    yPosB += self.cytoGraphicItems[chrB.name].y()
+                    pointA = QPoint(xPosA, yPosA)
+                    pointB = QPoint(xPosB, yPosB)
+                    connectionPath = QPainterPath()
+                    connectionPath.moveTo(pointA)
+                    #if the variant is intrachromosomal, draw a curved line, otherwise just a straight one
+                    if chrA.name == chrB.name:
+                        if placeLeft:
+                            pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
                         else:
-                            variantConnection = [variant[0], variant[2], str(variant[1]) + "," + str(variant[1]), str(variant[3]) + "," + str(variant[3]), variant[8]]
-                        if variantConnection == connection:
-                            pen.setBrush(Qt.red)
-                            connectionItem.setZValue(3)
-                connectionItem.setPen(pen)
-                self.scene.addItem(connectionItem)
-                self.connectionGraphicItems.append(connectionItem)
+                            pointC = QPoint(xPosA+80, (yPosA+yPosB)/2)
+                        placeLeft = not placeLeft
+                        connectionPath.quadTo(pointC, pointB)
+                    else:
+                        connectionPath.lineTo(pointB)
+                    connectionItem = QGraphicsPathItem(connectionPath)
+                    pen = QPen()
+                    pen.setBrush(Qt.darkCyan)
+                    pen.setWidth(2)
+                    connectionItem.setZValue(2)
+                    #if the variant is selected, color it red
+                    if variant[11] or variant in selectedVariants:
+                        pen.setBrush(Qt.red)
+                        connectionItem.setZValue(3)
+                    connectionItem.setPen(pen)
+                    self.scene.addItem(connectionItem)
+                    self.connectionGraphicItems.append(connectionItem)
 
     #Create chromosome items consisting of cytobands, names of bands, and chromosome names
     def createChromosomeItems(self):
@@ -422,7 +406,7 @@ class KaryogramView(QGraphicsView):
             numRows = math.ceil(24 / self.itemsPerRow)
             displaceY = 0
             longestItemInRow = 0
-
+            
             #Create the graphic items for each chromosome if they are set to be displayed
             for chromo in self.chromosomes:
                 if not chromo.display or "GL" in chromo.name or "MT" in chromo.name:
@@ -531,9 +515,13 @@ class KaryogramView(QGraphicsView):
 
     def markVariants(self):
         self.variantMarkItems = []
-        if self.activeChromo and self.varTable and self.activeChromo.display:
-            chrA = self.activeChromo
-            variants = common.returnVariants(chrA,self.varTable)
+        selectedVariants = []
+        for chrA in self.chromosomes:
+            if not chrA.display:
+                continue
+                
+            if self.activeChromo and self.varTable and self.activeChromo.display:
+                selectedVariants = common.returnVariants(self.activeChromo,self.varTable)
             chrAHeight = 0
             xPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).left()
             yPosA = self.cytoGraphicItems[chrA.name].mapRectToScene(self.cytoGraphicItems[chrA.name].boundingRect()).bottom()
@@ -544,95 +532,97 @@ class KaryogramView(QGraphicsView):
                             yPosA = band.mapRectToScene(band.boundingRect()).top()
             chrAWidth = self.chromoWidth+1
             chrALength = int(chrA.end)
-            for variant in variants:
-                #if variant.display is false
-                if not variant[9] or variant[2].startswith("G"):
-                    continue
-                if "WINA" in variant[5]:
-                    if not self.chromosomeDict[variant[2]].display:
-                        continue
-                    chrB = self.chromosomeDict[variant[2]]
-                    chrBHeight = 0
-                    xPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).left()
-                    yPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).bottom()
-                    for band in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
-                        chrBHeight += band.mapRectToScene(band.boundingRect()).height()
-                        xPosB = band.mapRectToScene(band.boundingRect()).left()
-                        if band.mapRectToScene(band.boundingRect()).top() < yPosB:
-                            yPosB = band.mapRectToScene(band.boundingRect()).top()
-                    chrBWidth = self.chromoWidth+1
-                    chrBLength = int(chrB.end)
-                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                            startWinA = int(variant[5]["WINB"].split(',')[0])
-                            endWinA = int(variant[5]["WINB"].split(',')[1])
-                            startWinB = int(variant[5]["WINA"].split(',')[0])
-                            endWinB = int(variant[5]["WINA"].split(',')[1])
-                    else:
-                            startWinA = int(variant[5]["WINA"].split(',')[0])
-                            endWinA = int(variant[5]["WINA"].split(',')[1])
-                            startWinB = int(variant[5]["WINB"].split(',')[0])
-                            endWinB = int(variant[5]["WINB"].split(',')[1])
-                    lengthWinA = endWinA - startWinA
-                    lengthWinB = endWinB - startWinB
-                    markHeightA = (lengthWinA/chrALength)*chrAHeight
-                    markHeightB = (lengthWinB/chrBLength)*chrBHeight
-                    markRectA = QRect(xPosA, yPosA + (startWinA/chrALength)*chrAHeight, chrAWidth, markHeightA)
-                    markRectB = QRect(xPosB, yPosB + (startWinB/chrBLength)*chrBHeight, chrBWidth, markHeightB)
-                    markRectItemA = QGraphicsRectItem(markRectA)
-                    markRectItemB = QGraphicsRectItem(markRectB)
-                    if variant[4] == "DEL":
-                        markRectItemA.setBrush(QBrush(Qt.red))
-                        markRectItemB.setBrush(QBrush(Qt.red))
-                        markRectItemA.setPen(QPen(QBrush(Qt.red),1))
-                        markRectItemB.setPen(QPen(QBrush(Qt.red),1))
-                    elif variant[4] == "DUP":
-                        markRectItemA.setBrush(QBrush(Qt.green))
-                        markRectItemB.setBrush(QBrush(Qt.green))
-                        markRectItemA.setPen(QPen(QBrush(Qt.green),1))
-                        markRectItemB.setPen(QPen(QBrush(Qt.green),1))
-                    else:
-                        markRectItemA.setBrush(QBrush(Qt.blue))
-                        markRectItemB.setBrush(QBrush(Qt.blue))
-                        markRectItemA.setPen(QPen(QBrush(Qt.blue),1))
-                        markRectItemB.setPen(QPen(QBrush(Qt.blue),1))
-                    markRectItemA.setOpacity(0.5)
-                    markRectItemB.setOpacity(0.5)
-                    self.cytoGraphicItems[chrA.name].addToGroup(markRectItemA)
-                    self.cytoGraphicItems[chrB.name].addToGroup(markRectItemB)
-                    self.scene.addItem(markRectItemA)
-                    self.scene.addItem(markRectItemB)
-                    self.variantMarkItems.append(markRectItemA)
-                    self.variantMarkItems.append(markRectItemB)
+            for variant in chrA.variants:
+                #only create marks if the variant is active, and not a GLXXXXX and if either it is selected or marked
+                if variant[9] and not variant[2].startswith("G") and (variant in selectedVariants or variant[11]):
+                    if "WINA" in variant[5]:
+                        if not self.chromosomeDict[variant[2]].display:
+                            continue
+                        chrB = self.chromosomeDict[variant[2]]
+                        chrBHeight = 0
+                        xPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).left()
+                        yPosB = self.cytoGraphicItems[chrB.name].mapRectToScene(self.cytoGraphicItems[chrB.name].boundingRect()).bottom()
+                        for band in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
+                            chrBHeight += band.mapRectToScene(band.boundingRect()).height()
+                            xPosB = band.mapRectToScene(band.boundingRect()).left()
+                            if band.mapRectToScene(band.boundingRect()).top() < yPosB:
+                                yPosB = band.mapRectToScene(band.boundingRect()).top()
+                        chrBWidth = self.chromoWidth+1
+                        chrBLength = int(chrB.end)
+                        if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                                startWinA = int(variant[5]["WINB"].split(',')[0])
+                                endWinA = int(variant[5]["WINB"].split(',')[1])
+                                startWinB = int(variant[5]["WINA"].split(',')[0])
+                                endWinB = int(variant[5]["WINA"].split(',')[1])
+                        else: 
+                                startWinA = int(variant[5]["WINA"].split(',')[0])
+                                endWinA = int(variant[5]["WINA"].split(',')[1])
+                                startWinB = int(variant[5]["WINB"].split(',')[0])
+                                endWinB = int(variant[5]["WINB"].split(',')[1])
+                        lengthWinA = endWinA - startWinA
+                        lengthWinB = endWinB - startWinB
+                        markHeightA = (lengthWinA/chrALength)*chrAHeight
+                        markHeightB = (lengthWinB/chrBLength)*chrBHeight
+                        markRectA = QRect(xPosA, yPosA + (startWinA/chrALength)*chrAHeight, chrAWidth, markHeightA)
+                        markRectB = QRect(xPosB, yPosB + (startWinB/chrBLength)*chrBHeight, chrBWidth, markHeightB)
+                        markRectItemA = QGraphicsRectItem(markRectA)
+                        markRectItemB = QGraphicsRectItem(markRectB)
+                        if variant[4] == "DEL":
+                            markRectItemA.setBrush(QBrush(Qt.red))
+                            markRectItemB.setBrush(QBrush(Qt.red))
+                            markRectItemA.setPen(QPen(QBrush(Qt.red),1))
+                            markRectItemB.setPen(QPen(QBrush(Qt.red),1))
+                        elif variant[4] == "DUP":
+                            markRectItemA.setBrush(QBrush(Qt.green))
+                            markRectItemB.setBrush(QBrush(Qt.green))
+                            markRectItemA.setPen(QPen(QBrush(Qt.green),1))
+                            markRectItemB.setPen(QPen(QBrush(Qt.green),1))
+                        else:   
+                            markRectItemA.setBrush(QBrush(Qt.blue))
+                            markRectItemB.setBrush(QBrush(Qt.blue))
+                            markRectItemA.setPen(QPen(QBrush(Qt.blue),1))
+                            markRectItemB.setPen(QPen(QBrush(Qt.blue),1))
+                        markRectItemA.setOpacity(0.5)
+                        markRectItemB.setOpacity(0.5)
+                        self.cytoGraphicItems[chrA.name].addToGroup(markRectItemA)
+                        self.cytoGraphicItems[chrB.name].addToGroup(markRectItemB)
+                        if startWinA == startWinB:
+                            self.scene.addItem(markRectItemA)
+                        else:
+                            self.scene.addItem(markRectItemA)
+                            self.scene.addItem(markRectItemB)
+                        self.variantMarkItems.append(markRectItemA)
+                        self.variantMarkItems.append(markRectItemB)
 
-                else:
-
-                    startPos = variant[1]
-                    endPos = variant[3]
-                    variantLength = endPos-startPos
-                    variantHeight = (variantLength/chrALength)*chrAHeight
-                    markRect = QRect(xPosA, yPosA + (startPos/chrALength)*chrAHeight, chrAWidth, variantHeight)
-                    markRectItem = QGraphicsRectItem(markRect)
-                    if variant[4] == "DEL":
-                        markRectItem.setBrush(QBrush(Qt.red))
-                        markRectItem.setPen(QPen(QBrush(Qt.red),1))
-                    elif variant[4] == "DUP":
-                        markRectItem.setBrush(QBrush(Qt.green))
-                        markRectItem.setPen(QPen(QBrush(Qt.green),1))
                     else:
-                        markRectItem.setBrush(QBrush(Qt.blue))
-                        markRectItem.setPen(QPen(QBrush(Qt.blue),1))
-                    markRectItem.setOpacity(0.5)
-                    self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
-                    self.scene.addItem(markRectItem)
-                    self.variantMarkItems.append(markRectItem)
-
+                            
+                        startPos = variant[1]
+                        endPos = variant[3]
+                        variantLength = endPos-startPos
+                        variantHeight = (variantLength/chrALength)*chrAHeight
+                        markRect = QRect(xPosA, yPosA + (startPos/chrALength)*chrAHeight, chrAWidth, variantHeight)
+                        markRectItem = QGraphicsRectItem(markRect)
+                        if variant[4] == "DEL":
+                            markRectItem.setBrush(QBrush(Qt.red))
+                            markRectItem.setPen(QPen(QBrush(Qt.red),1))
+                        elif variant[4] == "DUP":
+                            markRectItem.setBrush(QBrush(Qt.green))
+                            markRectItem.setPen(QPen(QBrush(Qt.green),1))
+                        else:   
+                            markRectItem.setBrush(QBrush(Qt.blue))
+                            markRectItem.setPen(QPen(QBrush(Qt.blue),1))
+                        markRectItem.setOpacity(0.5)
+                        self.cytoGraphicItems[chrA.name].addToGroup(markRectItem)
+                        self.scene.addItem(markRectItem)
+                        self.variantMarkItems.append(markRectItem)
 
     def updateItems(self):
         #Should use clear instead of individually removing..
         #Save any old positions of items in case they have been moved by the user
         for graphicItem in self.cytoGraphicItems.values():
+            self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
             try:
-                self.cytoGraphicItemPositions[graphicItem.nameString] = graphicItem.pos()
+                self.scene.removeItem(graphicItem)
             except:
                 pass
         self.scene.clear()
@@ -642,8 +632,8 @@ class KaryogramView(QGraphicsView):
             if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
                 graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
         try:
-            self.drawConnections()
             self.markVariants()
+            self.drawConnections()
         except:
             pass
         self.update()

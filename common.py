@@ -27,7 +27,7 @@ def createBedDict():
 #Creates and returns data model for variants in given chromosome
 def createVariantInfo(chromo):
     varModel = QStandardItemModel()
-    topstring = ['Active','TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score']
+    topstring = ['Active','TYPE', 'START', 'END', 'GENE(S)', 'CYTOBAND', 'Rank Score', 'Mark']
     varModel.setHorizontalHeaderLabels(topstring)
     #Adding variant info to a list
     for variant in chromo.variants:
@@ -68,6 +68,14 @@ def createVariantInfo(chromo):
         infoitem.append(QStandardItem(variant[8]))
         #this is rankscore in the variant
         infoitem.append(QStandardItem(variant[10]))
+        #this is a check for whether a variant is marked or not!
+        markCheckItem = QStandardItem()
+        markCheckItem.setCheckable(False)
+        if variant[11]:
+            markCheckItem.setCheckState(Qt.Checked)
+        else:
+            markCheckItem.setCheckState(Qt.Unchecked)
+        infoitem.append(markCheckItem)
         varModel.appendRow(infoitem)
     return varModel
 
@@ -92,6 +100,8 @@ def createVariantDia(chromo,parent):
     #Create button for activation of variants
     varButton = QPushButton('Toggle selected variant(s)', viewVarDia)
     varButton.clicked.connect(lambda: toggleVariants(chromo, varList))
+    markButton = QPushButton('Mark selected variant(s)')
+    markButton.clicked.connect(lambda: markVariants(chromo, varList))
     varList.setSortingEnabled(True)
     varList.setMinimumSize(700,400)
     varList.verticalHeader().hide()
@@ -102,8 +112,9 @@ def createVariantDia(chromo,parent):
     varList.resizeColumnToContents(1)
     varList.resizeColumnToContents(2)
     viewVarDia.layout = QGridLayout(viewVarDia)
-    viewVarDia.layout.addWidget(varList,0,0)
+    viewVarDia.layout.addWidget(varList,0,0,1,2)
     viewVarDia.layout.addWidget(varButton,1,0)
+    viewVarDia.layout.addWidget(markButton,1,1)
     return viewVarDia
 
 #Creates and returns a widget containing variant info in a table.
@@ -113,6 +124,8 @@ def createVariantWidget(chromo):
     #Create button for activation of variants
     varButton = QPushButton('Toggle selected variant(s)')
     varButton.clicked.connect(lambda: toggleVariants(chromo, varList))
+    markButton = QPushButton('Mark selected variant(s)')
+    markButton.clicked.connect(lambda: markVariants(chromo, varList))
     varList.setSortingEnabled(True)
     varList.verticalHeader().hide()
     varList.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -126,8 +139,9 @@ def createVariantWidget(chromo):
     varLayout = QGridLayout()
     varLayout.addWidget(chromoLabel,0,0)
     varLayout.setAlignment(chromoLabel,Qt.AlignHCenter)
-    varLayout.addWidget(varList,1,0)
+    varLayout.addWidget(varList,1,0,1,2)
     varLayout.addWidget(varButton,2,0)
+    varLayout.addWidget(markButton,2,1)
     varWidget = QWidget()
     varWidget.setLayout(varLayout)
     return varWidget
@@ -147,6 +161,22 @@ def toggleVariants(chromo, varView):
         else:
             dispVarItem.setCheckState(Qt.Checked)
             chromo.variants[row][9] = True
+    chromo.createConnections()
+    
+def markVariants(chromo, varView):
+    selectedProxyIndexes = varView.selectedIndexes()
+    #Selected indexes are indexes in proxy model, so translate to source indexes
+    selectedIndexes = [varView.model().mapToSource(proxyIndex) for proxyIndex in selectedProxyIndexes]
+    selectedRows = [index.row() for index in selectedIndexes]
+    selectedRows = set(selectedRows)
+    for row in selectedRows:
+        markVarItem = varView.model().sourceModel().item(row,7)
+        if chromo.variants[row][11]:
+            markVarItem.setCheckState(Qt.Unchecked)
+            chromo.variants[row][11] = False
+        else:
+            markVarItem.setCheckState(Qt.Checked)
+            chromo.variants[row][11] = True
     chromo.createConnections()
 
 #Toggles individual variants on and off

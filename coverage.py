@@ -588,56 +588,57 @@ class CoverageView(QWidget):
 
     def markVariants(self):
         chrA = self.chromosomes[self.activeChromo]
-        variants = common.returnVariants(chrA,self.varTable)
-        for variant in variants:
+        selectedVariants = common.returnVariants(chrA,self.varTable)
+        for variant in chrA.variants:
+                
+            if variant[9] and not variant[2].startswith("G") and (variant in selectedVariants or variant[11]):
+                if "WINA" in variant[5]:
+                    chrB = self.chromosomeDict[variant[2]]
+                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                            startWinA = int(variant[5]["WINB"].split(',')[0])
+                            endWinA = int(variant[5]["WINB"].split(',')[1])
+                            startWinB = int(variant[5]["WINA"].split(',')[0])
+                            endWinB = int(variant[5]["WINA"].split(',')[1])
+                    else: 
+                            startWinA = int(variant[5]["WINA"].split(',')[0])
+                            endWinA = int(variant[5]["WINA"].split(',')[1])
+                            startWinB = int(variant[5]["WINB"].split(',')[0])
+                            endWinB = int(variant[5]["WINB"].split(',')[1])
+                    if variant[0] is variant[2] and startWinA > self.limits[0] and endWinB < self.limits[0] + self.limits[1]:
+                        startRegionA = self.graphArea.left() + ( (startWinA-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                        widthRegionA = (endWinA-startWinA)/self.limits[1] * self.graphArea.width()
+                        startRegionB = self.graphArea.left() + ( (startWinB-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                        widthRegionB = (endWinB-startWinB)/self.limits[1] * self.graphArea.width()
+                        rectRegionA = QRectF(startRegionA,self.graphArea.top(),widthRegionA,self.graphArea.height())
+                        rectRegionB = QRectF(startRegionB,self.graphArea.top(),widthRegionB,self.graphArea.height())
+                        pen = QPen(QBrush(Qt.red),1)
+                        pen.setStyle(Qt.DashLine)
+                        regionGraphicA = QGraphicsRectItem(rectRegionA)
+                        regionGraphicB = QGraphicsRectItem(rectRegionB)
+                        regionGraphicA.setBrush(Qt.red)
+                        regionGraphicB.setBrush(Qt.red)
+                        regionGraphicA.setPen(pen)
+                        regionGraphicB.setPen(pen)
+                        regionGraphicA.setOpacity(0.6)
+                        regionGraphicB.setOpacity(0.6)
+                        self.mainScene.addItem(regionGraphicA)
+                        self.mainScene.addItem(regionGraphicB)
 
-            if not variant[9] or variant[2].startswith("G"):
-                continue
-            if "WINA" in variant[5]:
-                chrB = self.chromosomeDict[variant[2]]
-                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                        startWinA = int(variant[5]["WINB"].split(',')[0])
-                        endWinA = int(variant[5]["WINB"].split(',')[1])
-                        startWinB = int(variant[5]["WINA"].split(',')[0])
-                        endWinB = int(variant[5]["WINA"].split(',')[1])
                 else:
-                        startWinA = int(variant[5]["WINA"].split(',')[0])
-                        endWinA = int(variant[5]["WINA"].split(',')[1])
-                        startWinB = int(variant[5]["WINB"].split(',')[0])
-                        endWinB = int(variant[5]["WINB"].split(',')[1])
-                if variant[0] is variant[2] and startWinA > self.limits[0] and endWinB < self.limits[0] + self.limits[1]:
-                    startRegionA = self.graphArea.left() + ( (startWinA-self.limits[0])/self.limits[1] ) * self.graphArea.width()
-                    widthRegionA = (endWinA-startWinA)/self.limits[1] * self.graphArea.width()
-                    startRegionB = self.graphArea.left() + ( (startWinB-self.limits[0])/self.limits[1] ) * self.graphArea.width()
-                    widthRegionB = (endWinB-startWinB)/self.limits[1] * self.graphArea.width()
-                    rectRegionA = QRectF(startRegionA,self.graphArea.top(),widthRegionA,self.graphArea.height())
-                    rectRegionB = QRectF(startRegionB,self.graphArea.top(),widthRegionB,self.graphArea.height())
-                    pen = QPen(QBrush(Qt.red),1)
-                    pen.setStyle(Qt.DashLine)
-                    regionGraphicA = QGraphicsRectItem(rectRegionA)
-                    regionGraphicB = QGraphicsRectItem(rectRegionB)
-                    regionGraphicA.setBrush(Qt.red)
-                    regionGraphicB.setBrush(Qt.red)
-                    regionGraphicA.setPen(pen)
-                    regionGraphicB.setPen(pen)
-                    regionGraphicA.setOpacity(0.6)
-                    regionGraphicB.setOpacity(0.6)
-                    self.mainScene.addItem(regionGraphicA)
-                    self.mainScene.addItem(regionGraphicB)
-            else:
-                bpStart = variant[1]
-                bpEnd = variant[3]
-                if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
-                    regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
-                    regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
-                    regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
-                    pen = QPen(QBrush(Qt.red),1)
-                    pen.setStyle(Qt.DashLine)
-                    regionGraphic = QGraphicsRectItem(regionRect)
-                    regionGraphic.setBrush(Qt.red)
-                    regionGraphic.setPen(pen)
-                    regionGraphic.setOpacity(0.6)
-                    self.mainScene.addItem(regionGraphic)
+                    
+                    bpStart = variant[1]
+                    bpEnd = variant[3]
+                    if (variant[0] is variant[2]) and bpStart > self.limits[0] and bpEnd < self.limits[0] + self.limits[1]:
+                        regionStart = self.graphArea.left() + ( (bpStart-self.limits[0])/self.limits[1] ) * self.graphArea.width()
+                        regionWidth = (bpEnd-bpStart)/self.limits[1] * self.graphArea.width()
+                        regionRect = QRectF(regionStart,self.graphArea.top(),regionWidth,self.graphArea.height())
+                        pen = QPen(QBrush(Qt.red),1)
+                        pen.setStyle(Qt.DashLine)
+                        regionGraphic = QGraphicsRectItem(regionRect)
+                        regionGraphic.setBrush(Qt.red)
+                        regionGraphic.setPen(pen)
+                        regionGraphic.setOpacity(0.6)
+                        self.mainScene.addItem(regionGraphic)
 
     #Reads a tab file (with GC content) and adds a list of excluded regions in each chromosome
     def addExcludeGCFile(self):
