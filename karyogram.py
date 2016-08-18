@@ -185,10 +185,6 @@ class KaryogramView(QGraphicsView):
         viewVarButton = QPushButton(QIcon("icons/viewList.png"),"")
         viewVarButton.clicked.connect(self.viewVariants)
         viewVarButton.setToolTip("View selectedVariants in chromosome")
-        #Button for adding selectedVariants
-        #addVariantButton = QPushButton(QIcon("icons/new.png"),"")
-        #addVariantButton.clicked.connect(self.addVariant)
-        #addVariantButton.setToolTip("Add custom variant")
         #Button for toggling connections
         connButton = QPushButton(QIcon("icons/connections.png"),"")
         connButton.clicked.connect(self.toggleConnections)
@@ -305,18 +301,25 @@ class KaryogramView(QGraphicsView):
                 continue
             for variant in chrA.variants:
                 chrB = self.chromosomeDict[variant[2]]
+                #check whether a connection line will be shown. variant[9] is active/inactive, variant[2] is chrB - so do not show if chrB is GLXXXXX
+                #and then if either display_connections is true or if the variant is selected, or if it is marked (variant[11])
                 if variant[9] and not variant[2].startswith("G") and (chrA.display_connections or variant in selectedVariants or variant[11]):
                     if not self.chromosomeDict[variant[2]].display:
                         continue
-                    #If chrA higher in order than chrB, WINA and WINB are switched, so check this first  
-                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                        connEndPos = int(variant[5]["WINA"].split(',')[1])
-                        connStartPos = int(variant[5]["WINB"].split(',')[1])
+                    #if the windows are present use them, otherwise use START and END
+                    if "WINA" in variant[5]:                        
+                        #If chrA is higher in order than chrB, WINA and WINB are switched, so check this first  
+                        if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                            connStartPos = int(variant[5]["WINB"].split(',')[1])
+                            connEndPos = int(variant[5]["WINA"].split(',')[1])
+                        else:
+                            connStartPos = int(variant[5]["WINA"].split(',')[1])
+                            connEndPos = int(variant[5]["WINB"].split(',')[1])
                     else:
-                        connEndPos = int(variant[5]["WINB"].split(',')[1])
-                        connStartPos = int(variant[5]["WINA"].split(',')[1])
+                        connStartPos = int(variant[1])
+                        connEndPos = int(variant[3])
                     #The cytobands which the connections will go between
-                    #look for the cytoband on chrA, data(2) is the start pos for the cytoband and data(3) is the end pos
+                    #look for the cytoband on chrA. data(2) is the start pos for the cytoband and data(3) is the end pos, data(0) is the band object
                     for cytoItem in self.cytoGraphicItems[chrA.name].bandItemsDict.values():
                         if connStartPos > cytoItem.data(2) and connStartPos < cytoItem.data(3):
                                 cbandA = cytoItem.data(0)
@@ -324,7 +327,7 @@ class KaryogramView(QGraphicsView):
                     for cytoItem in self.cytoGraphicItems[chrB.name].bandItemsDict.values():
                         if connEndPos > cytoItem.data(2) and connEndPos < cytoItem.data(3):
                             cbandB = cytoItem.data(0)  
-                    #do not show small variants within one cytoband
+                    #do not show small variants within the same cytoband
                     if cbandA == cbandB:
                         continue
                     #do not show connections to bands that does not exist in the dictionary
@@ -355,6 +358,7 @@ class KaryogramView(QGraphicsView):
                     pointB = QPoint(xPosB, yPosB)
                     connectionPath = QPainterPath()
                     connectionPath.moveTo(pointA)
+                    #if the variant is intrachromosomal, draw a curved line, otherwise just a straight one
                     if chrA.name == chrB.name:
                         if placeLeft:
                             pointC = QPoint(xPosA-80, (yPosA+yPosB)/2)
@@ -369,6 +373,7 @@ class KaryogramView(QGraphicsView):
                     pen.setBrush(Qt.darkCyan)
                     pen.setWidth(2)
                     connectionItem.setZValue(2)
+                    #if the variant is selected, color it red
                     if variant[11] or variant in selectedVariants:
                         pen.setBrush(Qt.red)
                         connectionItem.setZValue(3)
@@ -620,12 +625,15 @@ class KaryogramView(QGraphicsView):
                 pass
         self.scene.clear()
         self.createChromosomeItems()
-        self.markVariants()
-        self.drawConnections()
         #Move back the items to their old positions
         for graphicItem in self.cytoGraphicItems.values():
             if graphicItem.nameString in self.cytoGraphicItemPositions and self.chromosomeDict[graphicItem.nameString].display:
                 graphicItem.setPos(self.cytoGraphicItemPositions[graphicItem.nameString])
+        try:
+            self.markVariants()
+            self.drawConnections()
+        except:
+            pass
         self.update()
 
     #Rearranges the graphic items to their default position

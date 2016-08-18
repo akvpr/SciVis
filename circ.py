@@ -862,57 +862,57 @@ class CircView(QGraphicsView):
         self.initscene()
 
     def highlightVariants(self):
-        if self.activeChromo and self.varTable:
-            chrA = self.activeChromo
-            variants = common.returnVariants(chrA,self.varTable)
-            for variant in variants:
-                if not (chrA.display):
-                    continue
-                chrB = self.chromosomeDict[variant[2]]
-                if chrB.name.startswith('G') or chrB.name == 'MT':
-                    continue
-                if not chrB.display:
-                    continue
-                #The curAngle determines where on the circle the chromosome is located (also used in makeItems)
-                curAngle_A = self.chromosome_angle_list[chrA.name][0]
-                curAngle_B = self.chromosome_angle_list[chrB.name][0]
-                #The windows of each variant (WINA, WINB) are used to determine where on the chromosome the interaction is located
-                #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
-                if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
-                    bp_End_A = int(variant[3])
-                    chrA_length = int(chrA.end)
-                    bp_End_B = int(variant[1])
-                    chrB_length = int(chrB.end)
-                else:
-                    bp_End_A = int(variant[1])
-                    chrA_length = int(chrA.end)
-                    bp_End_B = int(variant[3])
-                    chrB_length = int(chrB.end)
-                #A percentage of the total angle (used to draw the chromosome in makeItems) determines where on the
-                #chromosome the connection is located
-                angleIncr_A = (1-((chrA_length - bp_End_A) / chrA_length)) * (self.chromosome_angle_list[chrA.name][1]-2)
-                angleIncr_B = (1-((chrB_length - bp_End_B) / chrB_length)) * (self.chromosome_angle_list[chrB.name][1]-2)
-                #A Path is created to assign the position for the connections
-                tempPath = QPainterPath()
-                #The arMoveTo() function is used to get the different points on each chromosome the connection is located
-                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_A + angleIncr_A))
-                posA = tempPath.currentPosition()
-                tempPath.arcMoveTo(self.innerChrRect, - (curAngle_B + angleIncr_B))
-                posB = tempPath.currentPosition()
-                centerPos = self.outerChrRect.center()
-                #A Bezier curve is then created between these three points
-                connectionPath = QPainterPath()
-                connectionPath.moveTo(posA)
-                connectionPath.quadTo(centerPos,posB)
-                #The path is converted to a graphics path item
-                connectionItem = QGraphicsPathItem(connectionPath)
-                #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
-                pen = QPen(Qt.red, self.connWidth)
-                pen.setStyle(Qt.DashLine)
-                connectionItem.setPen(pen)
-                connectionItem.setZValue(2)
-                connectionItem.setOpacity(0.6)
-                self.scene.addItem(connectionItem)
+        selectedVariants = []
+        for chrA in self.chromosomes:
+            if not chrA.display:
+                continue
+            if self.activeChromo and self.varTable and self.activeChromo.display:
+                selectedVariants = common.returnVariants(self.activeChromo,self.varTable)
+            for variant in chrA.variants:
+                if variant[9] and not variant[2].startswith("G") and not variant[2].startswith("M") and (variant in selectedVariants or variant[11]):
+                    if not self.chromosomeDict[variant[2]].display:
+                            continue
+                    chrB = self.chromosomeDict[variant[2]]
+                    #The curAngle determines where on the circle the chromosome is located (also used in makeItems)
+                    curAngle_A = self.chromosome_angle_list[chrA.name][0]
+                    curAngle_B = self.chromosome_angle_list[chrB.name][0]
+                    #The windows of each variant (WINA, WINB) are used to determine where on the chromosome the interaction is located
+                    #If chrA higher in order than chrB, WINA and WINB are switched, so check this first
+                    if self.chromosomes.index(chrA) > self.chromosomes.index(chrB):
+                        bp_End_A = int(variant[3])
+                        chrA_length = int(chrA.end)
+                        bp_End_B = int(variant[1])
+                        chrB_length = int(chrB.end)
+                    else:
+                        bp_End_A = int(variant[1])
+                        chrA_length = int(chrA.end)
+                        bp_End_B = int(variant[3])
+                        chrB_length = int(chrB.end)
+                    #A percentage of the total angle (used to draw the chromosome in makeItems) determines where on the
+                    #chromosome the connection is located
+                    angleIncr_A = (1-((chrA_length - bp_End_A) / chrA_length)) * (self.chromosome_angle_list[chrA.name][1]-2)
+                    angleIncr_B = (1-((chrB_length - bp_End_B) / chrB_length)) * (self.chromosome_angle_list[chrB.name][1]-2)
+                    #A Path is created to assign the position for the connections
+                    tempPath = QPainterPath()
+                    #The arMoveTo() function is used to get the different points on each chromosome the connection is located
+                    tempPath.arcMoveTo(self.innerChrRect, - (curAngle_A + angleIncr_A))
+                    posA = tempPath.currentPosition()
+                    tempPath.arcMoveTo(self.innerChrRect, - (curAngle_B + angleIncr_B))
+                    posB = tempPath.currentPosition()
+                    centerPos = self.outerChrRect.center()
+                    #A Bezier curve is then created between these three points
+                    connectionPath = QPainterPath()
+                    connectionPath.moveTo(posA)
+                    connectionPath.quadTo(centerPos,posB)
+                    #The path is converted to a graphics path item
+                    connectionItem = QGraphicsPathItem(connectionPath)
+                    #The PathItem is given the color of chromosome B and a width (default is 1 pixel wide)
+                    pen = QPen(Qt.red, self.connWidth)
+                    pen.setStyle(Qt.DashLine)
+                    connectionItem.setPen(pen)
+                    connectionItem.setZValue(2)
+                    connectionItem.setOpacity(0.6)
+                    self.scene.addItem(connectionItem)
 
     #Iterates through lists of regions for each chr formatted as identifier,start,end,text ..  and adds a circle layer with these regions
     def addLayers(self):
