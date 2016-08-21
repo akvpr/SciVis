@@ -360,10 +360,6 @@ class CoverageView(QWidget):
             #Presuming we're dealing with a diploid genome, the norm should represent 2 copies, so multiply by 2
             coverageData.append(2*val/normValue)
 
-        #startIndex = round(limits[0] / int(chromo.end) * len(coverageData))
-        #endIndex = round((limits[0] + limits[1]) / int(chromo.end) * len(coverageData))
-        #coverageData = coverageData[startIndex:endIndex]
-
         #Draw the y axis
         leftLine = QLineF(self.graphArea.bottomLeft(),self.graphArea.topLeft())
         rightLine = QLineF(self.graphArea.bottomRight(),self.graphArea.topRight())
@@ -463,8 +459,10 @@ class CoverageView(QWidget):
                                       self.graphArea.bottom() - coverageData[index]*yAxisIncrement)
                 endPoint = QPointF( self.graphArea.left() + ((index+1)/len(coverageData))*self.graphArea.width(),
                                       self.graphArea.bottom() - coverageData[index+1]*yAxisIncrement)
-                line = QLineF(startPoint, endPoint)
-                lineItem = QGraphicsLineItem(line)
+                line = QLineF(startPoint,endPoint)
+                lineItem = QGraphicsLineItem()
+                lineItem.setPos(0,0)
+                lineItem.setLine(line)
                 lineItem.setPen(colorPen)
                 lineItem.setData(0,'plotItem')
                 pointBp = index*self.bpWindow*1000
@@ -473,7 +471,7 @@ class CoverageView(QWidget):
                 lineItem.setData(1,pointBp)
                 lineItem.setData(2,coverageData[index])
                 self.mainScene.addItem(lineItem)
-                self.dataPoints.append(pointItem)
+                self.dataPoints.append(lineItem)
 
     def placeDataPoints(self):
         #Spread out shown values over graph
@@ -489,13 +487,11 @@ class CoverageView(QWidget):
         chromo = self.chromosomes[self.activeChromo]
         #Save position and size of current chromosome marker before clearing
         mRect = self.selectorItem.returnMarkerRect()
-        #self.mainScene.clear()
         self.bedScene.clear()
         self.overviewScene.clear()
         #Create position overview item
         self.createOverview(chromo)
         #Plot coverage
-        #self.createPlot(chromo,self.plotType,self.limits)
         self.placeDataPoints()
         #Create and add selection marker
         self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
@@ -534,7 +530,10 @@ class CoverageView(QWidget):
         self.trackViewArea = QRectF(self.centerArea.left(),0,self.centerArea.width(),50)
 
     def changePlotType(self,index):
+        self.mainScene.clear()
         self.plotType = index
+        chromo = self.chromosomes[self.activeChromo]
+        self.createPlot(chromo,self.plotType,self.limits)
         self.updatePlot()
 
     def updateLimits(self):
@@ -586,6 +585,48 @@ class CoverageView(QWidget):
         #Update the limits in the settings model as well
         self.settingsModel.item(1,1).setData(self.dupLimit,0)
         self.settingsModel.item(2,1).setData(self.delLimit,0)
+        self.mainScene.removeItem(self.delDupLimits)
+        self.delDupLimits = DelDupLimitItem(delLine,dupLine,self.graphArea,self)
+        self.mainScene.addItem(self.delDupLimits)
+        #Update data point brushes to reflect new limits
+        if self.plotType == 0:
+            for point in self.dataPoints:
+                    if point.data(2) < self.delLimit:
+                        point.setBrush(QBrush(Qt.red))
+                    elif point.data(2) > self.dupLimit:
+                        point.setBrush(QBrush(Qt.green))
+                    else:
+                        point.setBrush(QBrush(Qt.black))
+        elif self.plotType == 1:
+            offsetPoint = QPointF(self.graphArea.width()/2, 0)
+            linearGradient = QLinearGradient( QPointF(self.graphArea.bottomLeft()) + offsetPoint,
+                                              QPointF(self.graphArea.topLeft())  + offsetPoint )
+            linearGradient.setColorAt(1, Qt.green)
+            linearGradient.setColorAt(self.dupLimit/10, Qt.green)
+            linearGradient.setColorAt((self.dupLimit-0.005)/10, Qt.black)
+            linearGradient.setColorAt((self.delLimit+0.005)/10, Qt.black)
+            linearGradient.setColorAt(self.delLimit/10, Qt.red)
+            linearGradient.setColorAt(0, Qt.red)
+            colorBrush = QBrush(linearGradient)
+            colorPen = QPen()
+            colorPen.setBrush(colorBrush)
+            for point in self.dataPoints:
+                    point.setPen(colorPen)
+
+    def scrollGraphByBp(self,scrollBy):
+        chromo = self.chromosomes[self.activeChromo]
+        currentPos = self.limits[0]
+        newPos = currentPos + scrollBy
+        #Make sure we're not outside of limits after scrolling
+        if newPos + self.limits[1] < int(chromo.end) and newPos > 0:
+            limits = [newPos, self.limits[1]]
+            self.limits = limits
+            rectStart = self.overviewArea.left() + (newPos / int(chromo.end)) * self.overviewArea.width()
+            rectWidth = ((self.limits[1]) / int(chromo.end)) * self.overviewArea.width()
+            mRect = QRectF(rectStart,0,rectWidth,30)
+            self.selectorItem = AreaSelectorItem(mRect,self.overviewArea,self)
+            self.updatePlot()
+            self.updatePositionBoxes()
 
     def setActiveChromosome(self,chromoNumber,varTable):
         #Before switching, save current marker for this chr
@@ -823,6 +864,15 @@ class CoverageGraphicsView(QGraphicsView):
             textItem.setTextInteractionFlags(Qt.TextEditorInteraction)
             self.scene().addItem(textItem)
 
+    def keyPressEvent(self,event):
+        #Scrolls graph by amount of bp below. Could add amount to settings.
+        if event.key() == Qt.Key_Left:
+            self.parent.scrollGraphByBp(-1000000)
+        elif event.key() == Qt.Key_Right:
+            self.parent.scrollGraphByBp(1000000)
+        else:
+            QGraphicsView.keyPressEvent(self,event)
+
 #Graphics view for bed tracks, with most events disabled
 class BedGraphicsView(QGraphicsView):
 
@@ -966,7 +1016,6 @@ class DelDupLimitItem(QGraphicsItemGroup):
             self.dupLineItem.setLine(dupLine)
         #Update the plot on release
         self.parent.updateDelDup(self.delLineItem.line(),self.dupLineItem.line())
-        self.parent.updatePlot()
 
 class AreaSelectorItem(QGraphicsItemGroup):
 
