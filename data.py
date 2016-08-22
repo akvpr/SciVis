@@ -15,7 +15,7 @@ def readTab(toRead):
     totalBP = 0
     numChr = 0
     with open(toRead, 'r') as tab:
-            #Read the first line in the file, should start with #CHR.
+        #Read the first line in the file, should start with #CHR.
         line = tab.readline()
         if (not line.startswith("#CHR")):
             print('TAB file is not in correct format')
@@ -32,7 +32,7 @@ def readTab(toRead):
             return None
         else:
             curChrName = fields[0]
-            chrom = Chromosome(curChrName, fields[1])
+            chrom = Chromosome(curChrName)
             chrom.addCoverage(float(fields[3]))
             coverageNorm += float(fields[3])
             if(float(fields[3])) > 0:
@@ -53,7 +53,7 @@ def readTab(toRead):
             if fields[0] != curChrName:
                 chrom.setEnd(lastRead.split('\t')[2])
                 curChrName = fields[0]
-                chrom = Chromosome(curChrName, fields[1])
+                chrom = Chromosome(curChrName)
                 chromosomes.append(chrom)
                 numChr += 1
             #Every line contains coverage data of interest, for current chromosome
@@ -241,9 +241,8 @@ def saveConfig(fileName,circularConfig,coverageConfig,karyoConfig,heatmapConfig,
 
 class Chromosome():
 
-    def __init__(self, name, start):
+    def __init__(self, name):
         self.name = name
-        self.start = start
         self.coverage = []
         self.coverageLog = []
         self.display = False
