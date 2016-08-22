@@ -399,6 +399,7 @@ class CoverageView(QWidget):
         #Create x ticks to show chromosome position
         bpIncrement = limits[1] / 10
         bpStart = limits[0]
+        self.tickItems = []
         for i in range(0,10):
             point = QPointF(self.graphArea.left() + (i)*xAxisIncrement, self.graphArea.bottom())
             line = QLineF()
@@ -410,6 +411,7 @@ class CoverageView(QWidget):
             #Show the position in kbp
             xTickLabelItem = QGraphicsTextItem(str(round(bpPosition/1000)))
             xTickLabelItem.setPos(point +  QPointF(0, 0))
+            self.tickItems.append(xTickLabelItem)
             self.mainScene.addItem(xTickLabelItem)
 
         self.dataPoints = []
@@ -461,7 +463,6 @@ class CoverageView(QWidget):
                                       self.graphArea.bottom() - coverageData[index+1]*yAxisIncrement)
                 line = QLineF(startPoint,endPoint)
                 lineItem = QGraphicsLineItem()
-                lineItem.setPos(0,0)
                 lineItem.setLine(line)
                 lineItem.setPen(colorPen)
                 lineItem.setData(0,'plotItem')
@@ -475,13 +476,40 @@ class CoverageView(QWidget):
 
     def placeDataPoints(self):
         #Spread out shown values over graph
-        for point in self.dataPoints:
-            if point.data(1) >= self.limits[0] and point.data(1) <= self.limits[0] + self.limits[1]:
-                point.show()
-                xPos = self.graphArea.left() + (point.data(1)-self.limits[0])/(self.limits[1])*self.graphArea.width()
-                point.setX(xPos)
-            else:
-                point.hide()
+        if self.plotType == 0:
+            for point in self.dataPoints:
+                if point.data(1) >= self.limits[0] and point.data(1) <= self.limits[0] + self.limits[1]:
+                    point.show()
+                    xPos = self.graphArea.left() + (point.data(1)-self.limits[0])/(self.limits[1])*self.graphArea.width()
+                    point.setX(xPos)
+                else:
+                    point.hide()
+        elif self.plotType == 1:
+            for index in range(len(self.dataPoints)-1):
+                if self.dataPoints[index].data(1) >= self.limits[0] and self.dataPoints[index].data(1) <= self.limits[0] + self.limits[1]:
+                    oldLine = self.dataPoints[index].line()
+                    startX = self.graphArea.left() + (self.dataPoints[index].data(1)-self.limits[0])/(self.limits[1]) * self.graphArea.width()
+                    endX = self.graphArea.left() + (self.dataPoints[index+1].data(1)-self.limits[0])/(self.limits[1]) *self.graphArea.width()
+                    newLine = QLineF(startX,oldLine.y1(),endX,oldLine.y2())
+                    self.dataPoints[index].setLine(newLine)
+                    self.dataPoints[index].show()
+                else:
+                    self.dataPoints[index].hide()
+        #Redraw bp ticks
+        for item in self.tickItems:
+            self.mainScene.removeItem(item)
+        self.tickItems = []
+        xAxisIncrement = self.graphArea.width() / 10
+        bpIncrement = self.limits[1] / 10
+        bpStart = self.limits[0]
+        for i in range(0,10):
+            point = QPointF(self.graphArea.left() + (i)*xAxisIncrement, self.graphArea.bottom())
+            bpPosition = bpStart + i*bpIncrement
+            #Show the position in kbp
+            xTickLabelItem = QGraphicsTextItem(str(round(bpPosition/1000)))
+            xTickLabelItem.setPos(point +  QPointF(0, 0))
+            self.tickItems.append(xTickLabelItem)
+            self.mainScene.addItem(xTickLabelItem)
 
     def updatePlot(self):
         chromo = self.chromosomes[self.activeChromo]
