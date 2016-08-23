@@ -61,6 +61,8 @@ class CoverageView(QWidget):
         self.startBox = None
         self.endBox = None
         self.matchLocations = []
+        self.markVariantsItems = []
+        self.searchMarkItems = []
 
     def startScene(self):
         if self.firstStart:
@@ -666,6 +668,8 @@ class CoverageView(QWidget):
         self.varTable = varTable
         self.updateLimits()
         self.matchLocations = []
+        self.markVariantsItems = []
+        self.searchMarkItems = []
         self.mainScene.clear()
         chromo = self.chromosomes[self.activeChromo]
         self.createPlot(chromo,self.plotType,self.limits)
@@ -725,6 +729,9 @@ class CoverageView(QWidget):
     def markVariants(self):
         chrA = self.chromosomes[self.activeChromo]
         selectedVariants = common.returnVariants(chrA,self.varTable)
+        for item in self.markVariantsItems:
+            self.mainScene.removeItem(item)
+        self.markVariantsItems = []
         for variant in chrA.variants:
 
             if variant[9] and not variant[2].startswith("G") and (variant in selectedVariants or variant[11]):
@@ -757,6 +764,8 @@ class CoverageView(QWidget):
                         regionGraphicB.setPen(pen)
                         regionGraphicA.setOpacity(0.6)
                         regionGraphicB.setOpacity(0.6)
+                        self.markVariantsItems.append(regionGraphicA)
+                        self.markVariantsItems.append(regionGraphicB)
                         self.mainScene.addItem(regionGraphicA)
                         self.mainScene.addItem(regionGraphicB)
 
@@ -773,6 +782,7 @@ class CoverageView(QWidget):
                         regionGraphic.setBrush(Qt.red)
                         regionGraphic.setPen(pen)
                         regionGraphic.setOpacity(0.6)
+                        self.markVariantsItems.append(regionGraphic)
                         self.mainScene.addItem(regionGraphic)
 
 
@@ -825,19 +835,23 @@ class CoverageView(QWidget):
     #Searches for specified text in cytoband definitions and added track elements
     #and attempts to mark this location if a match is found
     def searchString(self,text):
-        chromo = self.chromosomes[self.activeChromo]
         self.matchLocations = []
-        #Search for a cytoband match in this chromosome
-        matches = [ [line[1],line[2]] for line in self.cytoInfo if (line[0] == chromo.name and text in line[3])]
-        self.matchLocations.extend(matches)
-        #Search in added track elements for this chromo
-        bedmatches = []
-        for bedLines in self.bedDict[chromo.name]:
-            matches = [[line[1],line[2]] for line in bedLines if text in line[3]]
+        if text:
+            chromo = self.chromosomes[self.activeChromo]
+            #Search for a cytoband match in this chromosome
+            matches = [ [line[1],line[2]] for line in self.cytoInfo if (line[0] == chromo.name and text in line[3])]
             self.matchLocations.extend(matches)
+            #Search in added track elements for this chromo
+            bedmatches = []
+            for bedLines in self.bedDict[chromo.name]:
+                matches = [[line[1],line[2]] for line in bedLines if text in line[3]]
+                self.matchLocations.extend(matches)
         self.updatePlot()
 
     def markSearchedRegions(self):
+        for item in self.searchMarkItems:
+            self.mainScene.removeItem(item)
+        self.searchMarkItems = []
         for location in self.matchLocations:
             bpStart = int(location[0])
             bpEnd = int(location[1])
@@ -851,6 +865,7 @@ class CoverageView(QWidget):
                 regionGraphic.setBrush(Qt.blue)
                 regionGraphic.setPen(pen)
                 regionGraphic.setOpacity(0.6)
+                self.searchMarkItems.append(regionGraphic)
                 self.mainScene.addItem(regionGraphic)
 
 #Handles events for main graph area
