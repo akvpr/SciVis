@@ -5,7 +5,7 @@ SciVis is a visualization tool for genomic data, especially structural variants,
 
 SciVis is built on PySide and Python 3.
 
-![Circle](/Screenshots/Circle.PNG)
+![Montage](/Screenshots/Montage.PNG)
 
 # Installation
 Either try running one of the following binaries:
