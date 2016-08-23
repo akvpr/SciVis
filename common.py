@@ -191,8 +191,8 @@ def returnVariants(chromo, varView):
         selectedVariants.append(chromo.variants[row])
     return selectedVariants
 
-#Adds a variant to selected chromosomes. Some models still have to be updated.
-#Not sure how to best handle input yet.
+#Template for adding a custom variant to selected chromosomes.
+#This function is currently not fully supported.
 def addVariant(chromo,chromosomes):
     addVariantDialog = QDialog()
     addVariantDialog.setWindowTitle("Add variant in contig " + chromo.name)

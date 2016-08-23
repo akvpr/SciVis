@@ -522,7 +522,9 @@ class SciVisView(QMainWindow):
             self.tools.show()
         if viewType == "heatmap":
             self.dockTabs.widget(0).layout().itemAtPosition(0,0).widget().selectRow(self.viewChromosomes[viewInd])
-            self.tools = self.addToolBar('Coverage tools')
+            self.tools = self.addToolBar('Heatmap tools')
+            showChInfoAct = QAction('Chromosomes',self)
+            showChInfoAct.triggered.connect(view.showChInfo)
             dataDict = view.returnActiveDataset()
             chromosomes = dataDict['chromosomeList']
             chromoABox = QComboBox()
@@ -549,6 +551,7 @@ class SciVisView(QMainWindow):
             forwardAct.setShortcut(QKeySequence(Qt.Key_Right))
             forwardAct.triggered.connect(view.forward)
             binSizeBox.setMaximumWidth(100)
+            self.tools.addAction(showChInfoAct)
             self.tools.addWidget(QLabel("Map chromosome:"))
             self.tools.addWidget(chromoABox)
             self.tools.addWidget(QLabel("to chromosome: "))

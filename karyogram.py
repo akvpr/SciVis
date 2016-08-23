@@ -151,9 +151,9 @@ class KaryogramView(QGraphicsView):
         #Button for toggling display of selected chromosomes in the scene
         togButton = QPushButton('Toggle display', self.chDia)
         togButton.clicked.connect(self.toggleDisp)
-        #Button for viewing selected chromosome selectedVariants
-        viewVarButton = QPushButton('View selectedVariants', self.chDia)
-        viewVarButton.clicked.connect(self.viewselectedVariants)
+        #Button for viewing selected chromosome variants
+        viewVarButton = QPushButton('View variants', self.chDia)
+        viewVarButton.clicked.connect(self.viewVariants)
         #Button for toggling connections
         connButton = QPushButton('Toggle connections', self.chDia)
         connButton.clicked.connect(self.toggleConnections)
@@ -224,14 +224,14 @@ class KaryogramView(QGraphicsView):
             chromo = self.chromosomes[row]
             viewVarDia = common.createVariantDia(chromo,self)
             #Also connect toggle button in the widget to update scene
-            viewVarDia.layout.itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+            viewVarDia.layout.itemAtPosition(1,0).widget().clicked.connect(self.updateItems)
             viewVarDia.show()
 
     def createVariantWidget(self,row):
         chromo = self.chromosomes[row]
         varWidget = common.createVariantWidget(chromo)
         #Also connect toggle button in the widget to update scene
-        varWidget.layout().itemAtPosition(2,0).widget().clicked.connect(self.updateItems)
+        varWidget.layout().itemAtPosition(1,0).widget().clicked.connect(self.updateItems)
         return varWidget
 
     def addVariant(self):

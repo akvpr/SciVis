@@ -155,7 +155,7 @@ class HeatmapView(QGraphicsView):
         self.chDia.layout = QGridLayout(self.chDia)
         self.chDia.layout.addWidget(self.chList,0,0,1,4)
         self.chDia.layout.addWidget(viewVarButton,1,0,1,1)
-        self.chDia.layout.addWidget(addVariantButton,1,1,1,1)
+        #self.chDia.layout.addWidget(addVariantButton,1,1,1,1)
         self.chDia.setMinimumSize(450,400)
         self.chDia.show()
 
@@ -182,7 +182,7 @@ class HeatmapView(QGraphicsView):
         chromoInfoLayout = QGridLayout()
         chromoInfoLayout.addWidget(self.chList,0,0,1,2)
         chromoInfoLayout.addWidget(viewVarButton,1,0,1,1)
-        chromoInfoLayout.addWidget(addVariantButton,1,1,1,1)
+        #chromoInfoLayout.addWidget(addVariantButton,1,1,1,1)
         chromoWidget = QWidget()
         chromoWidget.setLayout(chromoInfoLayout)
         return chromoWidget
