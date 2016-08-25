@@ -16,7 +16,7 @@ Linux (Debian Stretch): to be added
 
 Or install PySide and run app.py through python.
 
-#Settings
+# Settings
 User settings are located in the userSettings.conf file and can be customized either before running the program or during.
 
 # Circular diagram

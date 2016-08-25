@@ -777,3 +777,83 @@ class SciVisView(QMainWindow):
                 selModel = varTable.selectionModel()
                 selModel.selectionChanged.connect(view.initscene)
                 view.setActiveChromosome(selectedRow,varTable)
+
+class SciVisNoGUI():
+
+    def __init__(self):
+        #Load config file
+        (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("userSettings.conf")
+        self.colorNames = self.colors.keys()
+        for name in self.colorNames:
+            self.colors[name] = QColor(self.colors[name])
+
+    #Exports anything in the current view as a png image
+    def exportImage(self):
+        savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
+        viewType = view.type
+        if viewType == 'circ' or viewType == 'karyogram' or viewType == 'heatmap':
+            image = QImage(self.size(),QImage.Format_ARGB32)
+            image.fill(Qt.white)
+            imgPainter = QPainter(image)
+            imgPainter.setRenderHint(QPainter.Antialiasing)
+            view.scene.render(imgPainter)
+            imgPainter.end()
+            image.save(savePath)
+        elif viewType == 'coverage':
+            image = QImage(self.size(),QImage.Format_ARGB32)
+            image.fill(Qt.white)
+            imgPainter = QPainter(image)
+            imgPainter.setRenderHint(QPainter.Antialiasing)
+            view.mainScene.render(imgPainter)
+            imgPainter.end()
+            image.save(savePath)
+        else:
+            viewPixMap = QPixmap.grabWidget(self)
+            viewPixMap.save(savePath)
+
+    #Creates dataset item
+    def createDatasetItem(self, tabName, vcfName):
+        print("Reading TAB..")
+        (chromosomeList,coverageNorm,coverageNormLog,totalBP) = data.readTab(tabName)
+        print("Reading VCF..")
+        (chromosomeList,vcfInfoLines) = data.readVCFFile(vcfName,chromosomeList)
+        print("Reading cytoband file..")
+        cytoName = "cytoBand.txt"
+        cytoTab = data.readCytoTab(cytoName)
+        #Create a dict storing the actual data, and attach to item
+        itemData = {'chromosomeList':chromosomeList,'coverageNormLog':coverageNormLog,'coverageNorm':coverageNorm,
+        'vcfName':vcfName,'tabName':tabName, 'cytoTab':cytoTab}
+        return itemData
+
+    #Creates and initializes a new circular diagram
+    def newCirc(self,vcfPath,tabPath,chromoName):
+
+        selectedData = self.createDatasetItem(tabPath,vcfPath)
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            view = circ.CircView(selectedData,self.circularConfig,self)
+
+    #Creates and initializes a new coverage diagram
+    def newCovDiagram(self):
+
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+
+            view = coverage.CoverageView(selectedData,self.coverageConfig,self)
+
+
+
+    #Creates and initializes a new karyotype diagram
+    def newKaryogram(self):
+
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            view = karyogram.KaryogramView(selectedData,self.karyoConfig,self)
+
+
+    #Creates and initializes a new heatmap diagram
+    def newHeatmap(self):
+
+        #Initialize scene if a valid dataset has been returned
+        if selectedData is not None:
+            view = heatmap.HeatmapView(selectedData,self.heatmapConfig,self)
