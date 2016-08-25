@@ -14,7 +14,7 @@ Windows (10): to be added
 
 OS X (10.11): to be added
 
-Linux (Debian Stretch): to be added
+Linux (Debian Stretch): https://github.com/akvpr/SciVis/releases/download/0.1.0/SciVis_linux.zip
 
 Or install PySide and run app.py through python.
 
