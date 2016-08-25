@@ -2,6 +2,7 @@ import sys
 import data
 import circ
 import coverage
+import common
 import karyogram
 import heatmap
 import pickle
@@ -778,9 +779,14 @@ class SciVisView(QMainWindow):
                 selModel.selectionChanged.connect(view.initscene)
                 view.setActiveChromosome(selectedRow,varTable)
 
-class SciVisNoGUI():
+#Experimental instance for handling creating views and exporting images.
+#Not in a very functional state currently, should probably read from a settings file for 
+#toggling of displayed chromosomes, variants, bed files etc.
+class SciVisNoGUI(QWidget):
 
-    def __init__(self):
+    def __init__(self,app):
+        self.app = app
+        super().__init__()
         #Load config file
         (self.circularConfig,self.coverageConfig,self.karyoConfig,self.heatmapConfig,self.colors) = data.readConfig("userSettings.conf")
         self.colorNames = self.colors.keys()
@@ -788,11 +794,11 @@ class SciVisNoGUI():
             self.colors[name] = QColor(self.colors[name])
 
     #Exports anything in the current view as a png image
-    def exportImage(self):
-        savePath = QFileDialog.getSaveFileName(self, "Export image", defaultPath, "Images (*.png)")[0]
+    def exportImage(self, view, savePath):
         viewType = view.type
+        size = QSize(800,600)
         if viewType == 'circ' or viewType == 'karyogram' or viewType == 'heatmap':
-            image = QImage(self.size(),QImage.Format_ARGB32)
+            image = QImage(size,QImage.Format_ARGB32)
             image.fill(Qt.white)
             imgPainter = QPainter(image)
             imgPainter.setRenderHint(QPainter.Antialiasing)
@@ -800,16 +806,13 @@ class SciVisNoGUI():
             imgPainter.end()
             image.save(savePath)
         elif viewType == 'coverage':
-            image = QImage(self.size(),QImage.Format_ARGB32)
+            image = QImage(size,QImage.Format_ARGB32)
             image.fill(Qt.white)
             imgPainter = QPainter(image)
             imgPainter.setRenderHint(QPainter.Antialiasing)
             view.mainScene.render(imgPainter)
             imgPainter.end()
             image.save(savePath)
-        else:
-            viewPixMap = QPixmap.grabWidget(self)
-            viewPixMap.save(savePath)
 
     #Creates dataset item
     def createDatasetItem(self, tabName, vcfName):
@@ -827,33 +830,69 @@ class SciVisNoGUI():
 
     #Creates and initializes a new circular diagram
     def newCirc(self,vcfPath,tabPath,chromoName):
-
         selectedData = self.createDatasetItem(tabPath,vcfPath)
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             view = circ.CircView(selectedData,self.circularConfig,self)
-
+            chromo = view.chromosomeDict[chromoName]
+            varModel = common.createVariantInfo(chromo)
+            varList = QTableView()
+            varList.setModel(varModel)
+            view.setActiveChromosome(0,varList)
+            self.exportImage(view,"export.png")
+            self.close()
+            self.deleteLater()
+            sys.exit()
+            
     #Creates and initializes a new coverage diagram
-    def newCovDiagram(self):
-
+    def newCovDiagram(self,vcfPath,tabPath,chromoName):
+        selectedData = self.createDatasetItem(tabPath,vcfPath)
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
-
             view = coverage.CoverageView(selectedData,self.coverageConfig,self)
-
-
+            view.startScene()
+            chromo = view.chromosomeDict[chromoName]
+            varModel = common.createVariantInfo(chromo)
+            varList = QTableView()
+            varList.setModel(varModel)
+            #view.setActiveChromosome(0,varList)
+            view.limits = [0,int(chromo.end)]
+            view.graphArea = QRectF(0,0,800,600)
+            view.createPlot(chromo,0,[0,int(chromo.end)])
+            view.updatePlot()
+            self.exportImage(view,"export.png")
+            self.close()
+            self.deleteLater()
+            sys.exit()
 
     #Creates and initializes a new karyotype diagram
-    def newKaryogram(self):
-
+    def newKaryogram(self,vcfPath,tabPath,chromoName):
+        selectedData = self.createDatasetItem(tabPath,vcfPath)
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             view = karyogram.KaryogramView(selectedData,self.karyoConfig,self)
-
+            chromo = view.chromosomeDict[chromoName]
+            varModel = common.createVariantInfo(chromo)
+            varList = QTableView()
+            varList.setModel(varModel)
+            view.setActiveChromosome(0,varList)
+            self.exportImage(view,"export.png")
+            self.close()
+            self.deleteLater()
+            sys.exit()
 
     #Creates and initializes a new heatmap diagram
-    def newHeatmap(self):
-
+    def newHeatmap(self,vcfPath,tabPath,chromoName):
+        selectedData = self.createDatasetItem(tabPath,vcfPath)
         #Initialize scene if a valid dataset has been returned
         if selectedData is not None:
             view = heatmap.HeatmapView(selectedData,self.heatmapConfig,self)
+            chromo = view.chromosomeDict[chromoName]
+            varModel = common.createVariantInfo(chromo)
+            varList = QTableView()
+            varList.setModel(varModel)
+            view.setActiveChromosome(0,varList)
+            self.exportImage(view,"export.png")
+            self.close()
+            self.deleteLater()
+            sys.exit()

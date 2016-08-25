@@ -6,27 +6,31 @@ import argparse
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--export',type=str,nargs=4,help='Generate and export an image',
         metavar=('type', 'vcf', 'tab', 'chr'))
-
     args = parser.parse_args()
-    if args.export:
-        (diaType,vcfPath,tabPath,chromoName) = args.export
 
-        #Check if file locations are valid, try to read.
-        #Create dataset item
-        #Create circ.CircView etc
-        #Export as in mainwin?
+    if args.export:
+
+        (diaType,vcfPath,tabPath,chromoName) = args.export
+        app = QApplication(sys.argv)
+        scivisInstance = mainwin.SciVisNoGUI(app)
+
 
         if diaType == 'circ':
-            pass
+            scivisInstance.newCirc(vcfPath,tabPath,chromoName)
+            sys.exit(app.exec_())
         elif diaType == 'cov':
-            pass
+            scivisInstance.newCovDiagram(vcfPath,tabPath,chromoName)
+            sys.exit(app.exec_())
         elif diaType == 'karyo':
-            pass
+            scivisInstance.newKaryogram(vcfPath,tabPath,chromoName)
+            sys.exit(app.exec_())
         elif diaType == 'hmap':
+            #Needs additional work for definig chromosomes and variant types, etc.
             pass
+            #scivisInstance.newHeatmap(vcfPath,tabPath,chromoName)
+            #sys.exit(app.exec_())
         else:
             print("type has to be one of: circ, cov, karyo, hmap")
     else:
